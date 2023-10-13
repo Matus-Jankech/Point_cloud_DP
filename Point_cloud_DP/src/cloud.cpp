@@ -32,66 +32,95 @@ bool Cloud::save_cloud(std::string file_name)
 
 void Cloud::filter_outlier_points()
 {	
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_outliers(new pcl::PointCloud<pcl::PointXYZRGB>);
 
-	// Create the filtering object
+	// Create the SOR filtering object
 	pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
-	sor.setInputCloud(cloud_);
-	sor.setMeanK(25);
-	sor.setStddevMulThresh(5.0);
 	
+	// SOR param
+	sor.setMeanK(25);
+	sor.setStddevMulThresh(5.2);
+	
+	// Inliers
+	std::cerr << "Filtering inliers... " << std::endl;
+	sor.setInputCloud(cloud_);
+	sor.setNegative(false);
+	sor.filter(*cloud_inliers);
+
 	// Outliers
 	std::cerr << "Filtering outliers... " << std::endl;
 	sor.setNegative(true);
-	sor.filter(*cloud_filtered);
-	std::cerr << "Writting outliers... " << std::endl;
-	cloud_ = cloud_filtered;
-	save_cloud("street_cloud_outliers.ply");
-
-	// Inliers
-	std::cerr << "Filtering inliers... " << std::endl;
-	sor.setNegative(false);
-	sor.filter(*cloud_filtered);
+	sor.filter(*cloud_outliers);
+	
+	// Saving
 	std::cerr << "Writting inliers... " << std::endl;
-	cloud_ = cloud_filtered;
+	cloud_ = cloud_inliers;
 	save_cloud("street_cloud_inliers.ply");
+
+	std::cerr << "Writting outliers... " << std::endl;
+	cloud_ = cloud_outliers;
+	save_cloud("street_cloud_outliers.ply");
 }
 
-void Cloud::filter_ground_points()
+void Cloud::filter_ground_points(double lower_limit, int upper_limit)
 {	
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground_data(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered_data(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_data(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_data_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr combined_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+
 	pcl::PointIndicesPtr ground(new pcl::PointIndices);
 	pcl::ExtractIndices<pcl::PointXYZRGB> extract;
 
-	// Create the filtering object
+	// Create the morph filtering object
 	pcl::ApproximateProgressiveMorphologicalFilter<pcl::PointXYZRGB> morph_fil;
 	morph_fil.setInputCloud(cloud_);
 	morph_fil.setCellSize(0.1);
 	morph_fil.setMaxWindowSize(16);
-	morph_fil.setSlope(3);
-	morph_fil.setInitialDistance(0.13);
+	morph_fil.setSlope(6);
+	morph_fil.setInitialDistance(0.15);
 	morph_fil.setMaxDistance(0.3);
-	morph_fil.setNumberOfThreads(4);
+	morph_fil.setNumberOfThreads(6);
+
+	// Create the pass filtering object
+	pcl::PassThrough<pcl::PointXYZRGB> pass;
+	pass.setInputCloud(filtered_data);
+	pass.setFilterFieldName("z");
+	pass.setFilterLimits(lower_limit, upper_limit);
+
+	std::cerr << "Extracting ground indicies... " << std::endl;
 	morph_fil.extract(ground->indices);
+
+	// Extrach ground data with morph filter
+	std::cerr << "Filtering ground... " << std::endl;
+	extract.setInputCloud(cloud_);
+	extract.setIndices(ground);
+	extract.setNegative(false);
+	extract.filter(*filtered_data);
+
+	pass.setNegative (false);
+	pass.filter(*ground_data);
+
+	std::cerr << "Writting ground... " << std::endl;
+	cloud_ = ground_data;
+	save_cloud("street_cloud_ground.ply");
 
 	// Extrach non-ground data
 	std::cerr << "Filtering objects... " << std::endl;
-	extract.setInputCloud(cloud_);
 	extract.setIndices(ground);
 	extract.setNegative(true);
-	extract.filter(*cloud_filtered);
-	std::cerr << "Writting objects... " << std::endl;
-	cloud_ = cloud_filtered;
-	save_cloud("street_cloud_objects.ply");
+	extract.filter(*object_data);
 
-	// Extrach ground data
-	std::cerr << "Filtering ground... " << std::endl;
-	extract.setIndices(ground);
-	extract.setNegative(false);
-	extract.filter(*cloud_filtered);
-	std::cerr << "Writting ground... " << std::endl;
-	cloud_ = cloud_filtered;
-	save_cloud("street_cloud_ground.ply");
+	pass.setNegative (true);
+	pass.filter(*object_data_filtered);
+
+	std::cerr << "Writting objects... " << std::endl;
+	*combined_cloud = *object_data + *object_data_filtered;
+	cloud_ = combined_cloud;
+	save_cloud("street_cloud_objects.ply");
 }
 
 void Cloud::set_cloud_color(int r, int g, int b)

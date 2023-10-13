@@ -10,6 +10,12 @@
 #include <pcl/segmentation/approximate_progressive_morphological_filter.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/segmentation/extract_clusters.h>
+#include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/passthrough.h>
 
 class Cloud
 {
@@ -22,7 +28,7 @@ public:
 	void show_cloud();
 
 	void filter_outlier_points();
-	void filter_ground_points();
+	void filter_ground_points(double lower_limit, int upper_limit);
 
 public:
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_;
