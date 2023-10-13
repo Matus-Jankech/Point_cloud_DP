@@ -30,7 +30,7 @@ bool Cloud::save_cloud(std::string file_name)
 	return true;
 }
 
-void Cloud::filter_outliers()
+void Cloud::filter_outlier_points()
 {	
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
 
@@ -55,6 +55,43 @@ void Cloud::filter_outliers()
 	std::cerr << "Writting inliers... " << std::endl;
 	cloud_ = cloud_filtered;
 	save_cloud("street_cloud_inliers.ply");
+}
+
+void Cloud::filter_ground_points()
+{	
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointIndicesPtr ground(new pcl::PointIndices);
+	pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+
+	// Create the filtering object
+	pcl::ApproximateProgressiveMorphologicalFilter<pcl::PointXYZRGB> morph_fil;
+	morph_fil.setInputCloud(cloud_);
+	morph_fil.setCellSize(0.1);
+	morph_fil.setMaxWindowSize(16);
+	morph_fil.setSlope(3);
+	morph_fil.setInitialDistance(0.13);
+	morph_fil.setMaxDistance(0.3);
+	morph_fil.setNumberOfThreads(4);
+	morph_fil.extract(ground->indices);
+
+	// Extrach non-ground data
+	std::cerr << "Filtering objects... " << std::endl;
+	extract.setInputCloud(cloud_);
+	extract.setIndices(ground);
+	extract.setNegative(true);
+	extract.filter(*cloud_filtered);
+	std::cerr << "Writting objects... " << std::endl;
+	cloud_ = cloud_filtered;
+	save_cloud("street_cloud_objects.ply");
+
+	// Extrach ground data
+	std::cerr << "Filtering ground... " << std::endl;
+	extract.setIndices(ground);
+	extract.setNegative(false);
+	extract.filter(*cloud_filtered);
+	std::cerr << "Writting ground... " << std::endl;
+	cloud_ = cloud_filtered;
+	save_cloud("street_cloud_ground.ply");
 }
 
 void Cloud::set_cloud_color(int r, int g, int b)
