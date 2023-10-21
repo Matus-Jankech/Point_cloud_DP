@@ -13,5 +13,5 @@ file(GLOB all_SRCS
 
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
-add_executable(main ${all_SRCS} "src/cloud.cpp" "include/cloud.h")
+add_executable(main ${all_SRCS} "src/cloud_handler.cpp" "include/cloud_handler.h")
 target_link_libraries(main ${PCL_LIBRARIES})
