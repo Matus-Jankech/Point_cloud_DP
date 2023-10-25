@@ -76,67 +76,74 @@ void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr
 {	
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_small(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_large(new pcl::PointCloud<pcl::PointNormal>);
-
-	// Get normlas estimation
-	if (load_cloud<pcl::PointNormal>(cloud_normals_small, "normals_small.pcd") != 1 &&
-		load_cloud<pcl::PointNormal>(cloud_normals_large, "normals_large.pcd") != 1)
-	{
-		std::cerr << "Could not load normals estimation, calculating new one..." << std::endl;
-		calculate_normals_estimation(input_cloud, cloud_normals_small, cloud_normals_large);
-	}
-	double threshold = 0.1;
-
 	pcl::PointCloud<pcl::PointNormal>::Ptr don_cloud(new pcl::PointCloud<pcl::PointNormal>);
 
+	// Get normlas estimation
+	if (load_cloud<pcl::PointNormal>(cloud_normals_small, "normals_small.pcd") == false ||
+		load_cloud<pcl::PointNormal>(cloud_normals_large, "normals_large.pcd") == false)
+	{	
+		std::cerr << "Could not load normals estimation, calculating new one..." << std::endl;
+		calculate_normals_estimation(input_cloud, cloud_normals_small, cloud_normals_large);	
+	}
+
 	// Get DoN
-	if (load_cloud<pcl::PointNormal>(don_cloud, "don.pcd") != 1)
+	if (load_cloud<pcl::PointNormal>(don_cloud, "don.pcd") == false)
 	{
 		std::cerr << "Could not load difference of normals (DoN), calculating new one..." << std::endl;
 		calculate_don(input_cloud, don_cloud, cloud_normals_small, cloud_normals_large);
 	}
 
 	// Build the filter
-	pcl::ConditionOr<pcl::PointNormal>::Ptr range_cond(new pcl::ConditionOr<pcl::PointNormal>());
-	range_cond->addComparison(pcl::FieldComparison<pcl::PointNormal>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointNormal>("curvature", pcl::ComparisonOps::GT, threshold)));
-	pcl::ConditionalRemoval<pcl::PointNormal> condrem;
-	condrem.setCondition(range_cond);
-	condrem.setInputCloud(don_cloud);
-
 	pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_filtered(new pcl::PointCloud<pcl::PointNormal>);
-
-	// Apply filter
-	condrem.filter(*doncloud_filtered);
-	save_cloud<pcl::PointNormal>(don_cloud, "doncloud_filtered.pcd");
-
-	pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
-	pcl::KdTreeFLANN<pcl::PointXYZRGB> kdtree;
-	kdtree.setInputCloud(input_cloud);
-
-	// Iterate through the points in doncloud_filtered and find their indices in the main cloud
-	for (size_t i = 0; i < doncloud_filtered->size(); ++i) {
-		pcl::PointXYZRGB search_point;
-		search_point.x = doncloud_filtered->points[i].x;
-		search_point.y = doncloud_filtered->points[i].y;
-		search_point.z = doncloud_filtered->points[i].z;
-
-		std::vector<int> point_indices(1);
-		std::vector<float> point_distances(1);
-
-		if (kdtree.nearestKSearch(search_point, 1, point_indices, point_distances) > 0) {
-			// Add the index of the nearest point to inliers
-			inliers->indices.push_back(point_indices[0]);
-		}
-	}
-
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::ExtractIndices<pcl::PointXYZRGB> extract;
-	extract.setInputCloud(input_cloud);
-	extract.setIndices(inliers);
-	extract.setNegative(false);
-	extract.filter(*cloud_filtered);
 
-	save_cloud<pcl::PointXYZRGB>(cloud_filtered,"street_filtered.ply");
+	std::vector<double> lower_threshold = { 0.0, 0.05, 0.1, 0.15, 0.2 };
+	std::vector<double> upper_threshold = { 0.05, 0.1, 0.15, 0.2, 1.0 };
+
+	
+	for (int i = 0; i < lower_threshold.size(); i++)
+	{	
+		pcl::ConditionAnd<pcl::PointNormal>::Ptr range_cond(new pcl::ConditionAnd<pcl::PointNormal>());
+		range_cond->addComparison(pcl::FieldComparison<pcl::PointNormal>::ConstPtr(
+			new pcl::FieldComparison<pcl::PointNormal>("curvature", pcl::ComparisonOps::GE, lower_threshold[i])));
+		range_cond->addComparison(pcl::FieldComparison<pcl::PointNormal>::ConstPtr(
+			new pcl::FieldComparison<pcl::PointNormal>("curvature", pcl::ComparisonOps::LT, upper_threshold[i])));
+
+		pcl::ConditionalRemoval<pcl::PointNormal> condrem;
+		condrem.setInputCloud(don_cloud);
+		condrem.setCondition(range_cond);
+		std::cout << "Filtering class " << i << "..." << std::endl;
+		condrem.filter(*doncloud_filtered);
+
+		pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+		pcl::KdTreeFLANN<pcl::PointXYZRGB> kdtree;
+		kdtree.setInputCloud(input_cloud);
+
+		//Iterate through the points in doncloud_filtered and find their indices in the main cloud
+		for (size_t j = 0; j < doncloud_filtered->size(); ++j) {
+			pcl::PointXYZRGB search_point;
+			search_point.x = doncloud_filtered->points[j].x;
+			search_point.y = doncloud_filtered->points[j].y;
+			search_point.z = doncloud_filtered->points[j].z;
+
+			std::vector<int> point_indices(1);
+			std::vector<float> point_distances(1);
+
+			if (kdtree.nearestKSearch(search_point, 1, point_indices, point_distances) > 0) {
+				// Add the index of the nearest point to inliers
+				inliers->indices.push_back(point_indices[0]);
+			}
+		}
+
+		pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+		extract.setInputCloud(input_cloud);
+		extract.setIndices(inliers);
+		extract.setNegative(false);
+		extract.filter(*cloud_filtered);
+
+		std::string file_name = "street_classified_" + std::to_string(i) + ".ply";
+		save_cloud<pcl::PointXYZRGB>(cloud_filtered, file_name);
+	}
 }
 
 void CloudHandler::set_cloud_color(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int r, int g, int b)

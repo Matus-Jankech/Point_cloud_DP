@@ -68,7 +68,7 @@ bool CloudHandler::load_cloud(typename pcl::PointCloud<PointType>::Ptr& cloud, s
 		if (pcl::io::loadPLYFile<PointType>(resource_path_ + "/" + file_name, *cloud) == -1)
 		{
 			PCL_ERROR("Couldn't read file: %s \n", file_name.c_str());
-			return (false);
+			return false;
 		}
 		PCL_INFO("Loaded %d data points from: %s \n", cloud->width * cloud->height, file_name.c_str());
 		return true;
@@ -79,7 +79,7 @@ bool CloudHandler::load_cloud(typename pcl::PointCloud<PointType>::Ptr& cloud, s
 		if (pcl::io::loadPCDFile<PointType>(resource_path_ + "/" + file_name, *cloud) == -1)
 		{
 			PCL_ERROR("Couldn't read file: %s \n", file_name.c_str());
-			return (false);
+			return false;
 		}
 		PCL_INFO("Loaded %d data points from: %s \n", cloud->width * cloud->height, file_name.c_str());
 		return true;
@@ -87,6 +87,7 @@ bool CloudHandler::load_cloud(typename pcl::PointCloud<PointType>::Ptr& cloud, s
 	else
 	{
 		PCL_ERROR("Unknown point cloud type \n");
+		return false;
 	}
 }
 
@@ -103,7 +104,7 @@ bool CloudHandler::save_cloud(typename pcl::PointCloud<PointType>::Ptr& cloud, s
 		if (writer.write<PointType>(resource_path_ + "/" + file_name, *cloud, true, false) == -1)
 		{
 			PCL_ERROR("Couldn't save file: %s \n", file_name.c_str());
-			return (false);
+			return false;
 		}
 		PCL_INFO("Saved file: %s \n", file_name.c_str());
 		return true;
@@ -112,10 +113,10 @@ bool CloudHandler::save_cloud(typename pcl::PointCloud<PointType>::Ptr& cloud, s
 	{	
 		pcl::PCDWriter writer;
 		PCL_INFO("Writing file: cloud %s \n", file_name.c_str());
-		if (writer.write<PointType>(resource_path_ + "/" + file_name, *cloud, false) == -1)
+		if (writer.write<PointType>(resource_path_ + "/" + file_name, *cloud, true) == -1)
 		{
 			PCL_ERROR("Couldn't save file: %s \n", file_name.c_str());
-			return (false);
+			return false;
 		}
 		PCL_INFO("Saved file: %s \n", file_name.c_str());
 		return true;
@@ -123,5 +124,6 @@ bool CloudHandler::save_cloud(typename pcl::PointCloud<PointType>::Ptr& cloud, s
 	else
 	{
 		PCL_ERROR("Unknown point cloud type \n");
+		return false;
 	}
 }
