@@ -6,13 +6,15 @@ CloudHandler::CloudHandler()
 
 void CloudHandler::filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK, double std_dev)
 {	
+	pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_outliers(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
-	
+	pcl::copyPointCloud(*input_cloud, *cloud_inliers);
+	pcl::copyPointCloud(*input_cloud, *cloud_outliers);
+
 	sor.setMeanK(meanK); // 50
 	sor.setStddevMulThresh(std_dev); // 4
-	
+
 	std::cerr << "Filtering inliers... " << std::endl;
 	sor.setInputCloud(input_cloud);
 	sor.setNegative(false);
@@ -78,24 +80,29 @@ void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_large(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr don_cloud(new pcl::PointCloud<pcl::PointNormal>);
 
-	// Get normlas estimation
-	if (load_cloud<pcl::PointNormal>(cloud_normals_small, "normals_small.pcd") == false ||
-		load_cloud<pcl::PointNormal>(cloud_normals_large, "normals_large.pcd") == false)
-	{	
-		std::cerr << "Could not load normals estimation, calculating new one..." << std::endl;
-		calculate_normals_estimation(input_cloud, cloud_normals_small, cloud_normals_large);	
-	}
+
 
 	// Get DoN
 	if (load_cloud<pcl::PointNormal>(don_cloud, "don.pcd") == false)
-	{
+	{	
 		std::cerr << "Could not load difference of normals (DoN), calculating new one..." << std::endl;
+
+		// Get normlas estimation
+		if (load_cloud<pcl::PointNormal>(cloud_normals_small, "normals_small.pcd") == false ||
+			load_cloud<pcl::PointNormal>(cloud_normals_large, "normals_large.pcd") == false)
+		{
+			std::cerr << "Could not load normals estimation, calculating new one..." << std::endl;
+			calculate_normals_estimation(input_cloud, cloud_normals_small, cloud_normals_large);
+		}
+
 		calculate_don(input_cloud, don_cloud, cloud_normals_small, cloud_normals_large);
 	}
 
 	// Build the filter
 	pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_filtered(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::copyPointCloud(*input_cloud, *doncloud_filtered);
+	pcl::copyPointCloud(*input_cloud, *cloud_filtered);
 
 	std::vector<double> lower_threshold = { 0.0, 0.05, 0.1, 0.15, 0.2 };
 	std::vector<double> upper_threshold = { 0.05, 0.1, 0.15, 0.2, 1.0 };
