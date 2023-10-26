@@ -35,12 +35,11 @@ public:
 
 	// Filtering
 	void filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK = 50, double std_dev = 4);
-	void DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud);
+	void DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit);
 
 private:
 	void calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
-									  pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_small,
-									  pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large);
+									  pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals, double limit );
 	void calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& don_cloud,
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_small,

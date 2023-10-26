@@ -29,26 +29,18 @@ void CloudHandler::filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input
 }
 
 void CloudHandler::calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
-												pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_small,
-												pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large)
+												pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals, double limit)
 {	
 	pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB>());
 	pcl::NormalEstimationOMP<pcl::PointXYZRGB, pcl::PointNormal> ne;
+	std::string normals_file = "normlas_" + std::to_string(limit) + ".pcd";
 
-	std::cerr << "Computing small normals... " << std::endl;
 	ne.setInputCloud(input_cloud);
 	ne.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 	ne.setSearchMethod(tree);
-	ne.setRadiusSearch(0.15); // Use all neighbors in a sphere of radius 5cm
-	ne.compute(*cloud_normals_small);
-	save_cloud<pcl::PointNormal>(cloud_normals_small, "normals_small.pcd");
-	
-	std::cerr << "Computing large normals... " << std::endl;
-	ne.setInputCloud(input_cloud);
-	ne.setSearchMethod(tree);
-	ne.setRadiusSearch(0.5); // Use all neighbors in a sphere of radius 50cm
-	ne.compute(*cloud_normals_large);
-	save_cloud<pcl::PointNormal>(cloud_normals_large, "normals_large.pcd");
+	ne.setRadiusSearch(limit); // Use all neighbors in a sphere of radius 5cm
+	ne.compute(*cloud_normals);
+	save_cloud<pcl::PointNormal>(cloud_normals, normals_file);
 }
 
 void CloudHandler::calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
@@ -74,39 +66,39 @@ void CloudHandler::calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_c
 	save_cloud<pcl::PointNormal>(don_cloud, "don.pcd");
 }
 
-void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud)
+void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit)
 {	
+	std::vector<double> lower_threshold = { 0.0, 0.1, 0.2, 0.3, 0.4 };
+	std::vector<double> upper_threshold = { 0.1, 0.2, 0.3, 0.4, 1.0 };
+
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_small(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_large(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr don_cloud(new pcl::PointCloud<pcl::PointNormal>);
 
-
-
 	// Get DoN
-	if (load_cloud<pcl::PointNormal>(don_cloud, "don.pcd") == false)
-	{	
-		std::cerr << "Could not load difference of normals (DoN), calculating new one..." << std::endl;
+	std::string large_normals_file = "normlas_" + std::to_string(upper_limit) + ".pcd";
+	std::string small_normals_file = "normlas_" + std::to_string(lower_limit) + ".pcd";
 
-		// Get normlas estimation
-		if (load_cloud<pcl::PointNormal>(cloud_normals_small, "normals_small.pcd") == false ||
-			load_cloud<pcl::PointNormal>(cloud_normals_large, "normals_large.pcd") == false)
-		{
-			std::cerr << "Could not load normals estimation, calculating new one..." << std::endl;
-			calculate_normals_estimation(input_cloud, cloud_normals_small, cloud_normals_large);
-		}
-
-		calculate_don(input_cloud, don_cloud, cloud_normals_small, cloud_normals_large);
+	// Get normlas estimation
+	if (load_cloud<pcl::PointNormal>(cloud_normals_large, large_normals_file) == false)
+	{
+		std::cerr << "Could not load normals estimation "<< large_normals_file << ", calculating new one..." << std::endl;
+		calculate_normals_estimation(input_cloud, cloud_normals_large, upper_limit);
 	}
+	if (load_cloud<pcl::PointNormal>(cloud_normals_small, small_normals_file) == false)
+	{
+		std::cerr << "Could not load normals estimation " << small_normals_file << ", calculating new one..." << std::endl;
+		calculate_normals_estimation(input_cloud, cloud_normals_small, lower_limit);
+	}
+
+	calculate_don(input_cloud, don_cloud, cloud_normals_small, cloud_normals_large);
+
 
 	// Build the filter
 	pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_filtered(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::copyPointCloud(*input_cloud, *doncloud_filtered);
 	pcl::copyPointCloud(*input_cloud, *cloud_filtered);
-
-	std::vector<double> lower_threshold = { 0.0, 0.05, 0.1, 0.15, 0.2 };
-	std::vector<double> upper_threshold = { 0.05, 0.1, 0.15, 0.2, 1.0 };
-
 	
 	for (int i = 0; i < lower_threshold.size(); i++)
 	{	
@@ -190,18 +182,20 @@ void CloudHandler::show_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Pt
 							   std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr>& input_normals)
 {
 	pcl::visualization::PCLVisualizer viewer("Cloud Viewer");
+	unsigned int size = 0;
 
 	for (size_t i = 0; i < input_clouds.size(); i++) {
 		std::string cloud_id = "cloud_" + std::to_string(i);
 		viewer.addPointCloud(input_clouds[i], cloud_id);
+		size = size + input_clouds[i]->size();
 	}
 
 	for (size_t i = 0; i < input_normals.size(); i++) {
 		std::string normals_id = "normals_" + std::to_string(i);
-		viewer.addPointCloudNormals<pcl::PointNormal>(input_normals[i], 1, 1, normals_id);
+		viewer.addPointCloudNormals<pcl::PointNormal>(input_normals[i], 1, 0.1, normals_id);
 	}
 	
-	PCL_INFO("Point cloud visualized \n");
+	PCL_INFO("Point cloud visualized, size: %d\n", size);
 	while (!viewer.wasStopped())
 	{
 		viewer.spinOnce();
