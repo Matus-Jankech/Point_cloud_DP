@@ -28,6 +28,30 @@ void CloudHandler::filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input
 	save_cloud<pcl::PointXYZRGB>(cloud_outliers, "street_cloud_outliers.ply");
 }
 
+void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds)
+{	
+	std::vector<double> voxel_sizes = { 0.22, 0.20, 0.18, 0.17, 0.15 };
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_all(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::VoxelGrid<pcl::PointXYZRGB> sor;
+
+	unsigned int index = 0;
+	for (pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_cloud : input_clouds)
+	{	
+		pcl::copyPointCloud(*input_cloud, *cloud_downsampled);
+		sor.setInputCloud(input_cloud);
+		sor.setLeafSize(voxel_sizes[index], voxel_sizes[index], voxel_sizes[index]);
+		sor.filter(*cloud_downsampled);
+		*cloud_all = *cloud_all + *cloud_downsampled;
+
+		std::string file_name = "street_downsampled_" + std::to_string(index) + ".ply";
+		save_cloud<pcl::PointXYZRGB>(cloud_downsampled, file_name);
+		index++;
+	}
+
+	save_cloud<pcl::PointXYZRGB>(cloud_all, "street_downsampled_all.ply");
+}
+
 void CloudHandler::calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
 												pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals, double limit)
 {	
