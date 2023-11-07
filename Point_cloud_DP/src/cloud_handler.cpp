@@ -169,6 +169,53 @@ void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr
 	}
 }
 
+void CloudHandler::create_mesh(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
+{
+	// Normal estimation*
+	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
+	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(input_cloud);
+	n.setInputCloud(input_cloud);
+	n.setSearchMethod(tree);
+	n.setRadiusSearch(0.8);
+	n.compute(*normals);
+	//* normals should not contain the point normals + surface curvatures
+
+	// Concatenate the XYZ and normal fields*
+	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
+	pcl::concatenateFields(*input_cloud, *normals, *cloud_with_normals);
+
+	// Create search tree*
+	pcl::search::KdTree<pcl::PointNormal>::Ptr tree2(new pcl::search::KdTree<pcl::PointNormal>);
+	tree2->setInputCloud(cloud_with_normals);
+
+	// Initialize objects
+	pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
+	pcl::PolygonMesh triangles;
+
+	// Set the maximum distance between connected points (maximum edge length)
+	gp3.setSearchRadius(1.20);
+
+	// Set typical values for the parameters
+	gp3.setMu(2.5);
+	gp3.setMaximumNearestNeighbors(600);
+	gp3.setMaximumSurfaceAngle(M_PI / 8); // 45 degrees
+	gp3.setMinimumAngle(M_PI / 18); // 10 degrees
+	gp3.setMaximumAngle(2 * M_PI / 3); // 120 degrees
+	gp3.setNormalConsistency(false);
+
+	// Get result
+	PCL_INFO("Calculating mesh... \n");
+	gp3.setInputCloud(cloud_with_normals);
+	gp3.setSearchMethod(tree2);
+	gp3.reconstruct(triangles);
+
+	PCL_INFO("Saving mesh... \n");
+	pcl::io::savePolygonFileVTK(resource_path_ + "/mesh.vtk", triangles);
+	PCL_INFO("Mesh saved \n");
+}
+
 void CloudHandler::set_cloud_color(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int r, int g, int b)
 {
 	for (size_t i = 0; i < input_cloud->points.size(); ++i) {
@@ -226,3 +273,24 @@ void CloudHandler::show_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Pt
 	}
 }
 
+bool CloudHandler::load_mesh(pcl::PolygonMesh::Ptr& input_mesh, std::string file_name)
+{	
+	PCL_INFO("Loading mesh %s \n", file_name.c_str());
+	if (pcl::io::loadPolygonFileVTK(resource_path_ + "/" + file_name, *input_mesh) == -1) {
+		PCL_ERROR("Couldn't read file: %s \n", file_name);
+		return false;
+	}
+	PCL_INFO("Loaded mesh from: %s \n",  file_name.c_str());
+}
+
+void CloudHandler::show_mesh(pcl::PolygonMesh::Ptr& input_mesh)
+{	
+	pcl::visualization::PCLVisualizer viewer("Mesh Viewer");
+	viewer.addPolygonMesh(*input_mesh, "mesh");
+
+	PCL_INFO("Mesh visualized \n");
+	while (!viewer.wasStopped())
+	{
+		viewer.spinOnce();
+	}
+}
