@@ -14,10 +14,11 @@
 #include <pcl/filters/conditional_removal.h>
 #include <pcl/features/don.h>
 #include <pcl/filters/voxel_grid.h>
-
 #include <pcl/features/normal_3d.h>
 #include <pcl/surface/gp3.h>
 #include <pcl/io/vtk_lib_io.h>
+#include <pcl/surface/poisson.h>
+#include <pcl/common/distances.h>
 
 class CloudHandler
 {
@@ -42,7 +43,8 @@ public:
 	void filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK = 50, double std_dev = 4);
 	void DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit);
 	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds);
-	void create_mesh(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud);
+	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud);
+	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud);
 
 private:
 	void calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,

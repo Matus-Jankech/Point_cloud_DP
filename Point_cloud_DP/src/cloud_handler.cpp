@@ -169,9 +169,10 @@ void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr
 	}
 }
 
-void CloudHandler::create_mesh(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
+void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
 {
 	// Normal estimation*
+	PCL_INFO("Calculating normal estimation... \n");
 	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
 	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
@@ -180,7 +181,6 @@ void CloudHandler::create_mesh(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
 	n.setSearchMethod(tree);
 	n.setRadiusSearch(0.8);
 	n.compute(*normals);
-	//* normals should not contain the point normals + surface curvatures
 
 	// Concatenate the XYZ and normal fields*
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
@@ -200,7 +200,7 @@ void CloudHandler::create_mesh(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
 	// Set typical values for the parameters
 	gp3.setMu(2.5);
 	gp3.setMaximumNearestNeighbors(600);
-	gp3.setMaximumSurfaceAngle(M_PI / 8); // 45 degrees
+	gp3.setMaximumSurfaceAngle(M_PI / 2); // 45 degrees
 	gp3.setMinimumAngle(M_PI / 18); // 10 degrees
 	gp3.setMaximumAngle(2 * M_PI / 3); // 120 degrees
 	gp3.setNormalConsistency(false);
@@ -213,6 +213,102 @@ void CloudHandler::create_mesh(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
 
 	PCL_INFO("Saving mesh... \n");
 	pcl::io::savePolygonFileVTK(resource_path_ + "/mesh.vtk", triangles);
+	PCL_INFO("Mesh saved \n");
+}
+
+void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
+{
+	// Normal estimation*
+	PCL_INFO("Calculating normal estimation... \n");
+	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
+	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(input_cloud);
+	n.setInputCloud(input_cloud);
+	n.setSearchMethod(tree);
+	n.setRadiusSearch(0.5);
+	n.compute(*normals);
+
+	// Concatenate the XYZ and normal fields*
+	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
+	pcl::concatenateFields(*input_cloud, *normals, *cloud_with_normals);
+
+	pcl::Poisson<pcl::PointNormal> poisson;
+	poisson.setInputCloud(cloud_with_normals); // Set your input point cloud
+	poisson.setDepth(13); // Set the depth level of the Octree
+	poisson.setSolverDivide(50);
+	poisson.setIsoDivide(50);
+	poisson.setThreads(8);
+
+	// Perform Poisson surface reconstruction
+	PCL_INFO("Calculating mesh... \n");
+	pcl::PolygonMesh mesh;
+	poisson.reconstruct(mesh);
+
+	// Define your threshold distance
+	const double distanceThreshold = 0.1; 
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr meshPointCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::fromPCLPointCloud2(mesh.cloud, *meshPointCloud);
+
+	// Create KD-Tree for the input cloud
+	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+	kdtree.setInputCloud(input_cloud);
+
+	PCL_INFO("Calculating good vertices... \n");
+	std::vector<int> verticesToRemove;
+
+	for (size_t i = 0; i < meshPointCloud->size(); ++i) {
+		// Search for the closest point in the input cloud to the current point in the mesh
+		std::vector<int> nearest_indices(1);
+		std::vector<float> nearest_distances(1);
+
+		pcl::PointXYZ searchPoint = meshPointCloud->at(i);
+		if (kdtree.nearestKSearch(searchPoint, 1, nearest_indices, nearest_distances) > 0) {
+			if (nearest_distances[0] > distanceThreshold) {
+				verticesToRemove.push_back(i);
+			}
+		}
+	}
+	
+
+	PCL_INFO("Removing bad vertices... \n");
+	std::vector<pcl::Vertices>& polygons = mesh.polygons;
+	std::vector<pcl::Vertices> newPolygons;
+
+	// Remove all vertices and their associated polygons
+	std::cout << "" << std::endl;
+	for (size_t i = 0; i < polygons.size(); ++i) {
+		std::cout << "\r";
+		std::cout << "Progress: " << i / float(polygons.size()) * 100 << "%";
+		pcl::Vertices vertices = polygons[i];
+		pcl::Vertices newVertices;
+		std::vector<uint32_t> newIndices;
+
+		// Check if any of the vertices to remove are present in the current polygon
+		for (size_t j = 0; j < vertices.vertices.size(); ++j) {
+			uint32_t vertexIndex = vertices.vertices[j];
+			if (std::find(verticesToRemove.begin(), verticesToRemove.end(), vertexIndex) == verticesToRemove.end()) {
+				// If the vertex is not to be removed, add it to the new indices
+				newIndices.push_back(vertexIndex);
+			}
+		}
+
+		// If the newIndices vector is not empty, construct new vertices and store them
+		if (!newIndices.empty()) {
+			for (const auto& index : newIndices) {
+				newVertices.vertices.push_back(index);
+			}
+			newPolygons.push_back(newVertices);
+		}
+	}
+	std::cout << "" << std::endl;
+
+	// Update the mesh with the modified polygon list
+	mesh.polygons = newPolygons;
+
+	PCL_INFO("Saving mesh... \n");
+	pcl::io::savePolygonFileVTK(resource_path_ + "/mesh2.vtk", mesh);
 	PCL_INFO("Mesh saved \n");
 }
 
