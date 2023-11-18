@@ -246,7 +246,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	poisson.reconstruct(mesh);
 
 	// Define your threshold distance
-	const double distanceThreshold = 0.1; 
+	const double distanceThreshold = 0.05; 
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr meshPointCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::fromPCLPointCloud2(mesh.cloud, *meshPointCloud);
@@ -275,40 +275,43 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	PCL_INFO("Removing bad vertices... \n");
 	std::vector<pcl::Vertices>& polygons = mesh.polygons;
 	std::vector<pcl::Vertices> newPolygons;
+	std::mutex mutex;
+	std::atomic<int> progressCounter(0); 
 
-	// Remove all vertices and their associated polygons
-	std::cout << "" << std::endl;
-	for (size_t i = 0; i < polygons.size(); ++i) {
-		std::cout << "\r";
-		std::cout << "Progress: " << i / float(polygons.size()) * 100 << "%";
-		pcl::Vertices vertices = polygons[i];
+	std::for_each(std::execution::par, std::begin(polygons), std::end(polygons), [&](pcl::Vertices& vertices)
+	{
 		pcl::Vertices newVertices;
 		std::vector<uint32_t> newIndices;
 
-		// Check if any of the vertices to remove are present in the current polygon
 		for (size_t j = 0; j < vertices.vertices.size(); ++j) {
 			uint32_t vertexIndex = vertices.vertices[j];
 			if (std::find(verticesToRemove.begin(), verticesToRemove.end(), vertexIndex) == verticesToRemove.end()) {
-				// If the vertex is not to be removed, add it to the new indices
 				newIndices.push_back(vertexIndex);
 			}
 		}
 
-		// If the newIndices vector is not empty, construct new vertices and store them
 		if (!newIndices.empty()) {
 			for (const auto& index : newIndices) {
 				newVertices.vertices.push_back(index);
 			}
+			std::lock_guard<std::mutex> lock(mutex); 
 			newPolygons.push_back(newVertices);
 		}
+
+		progressCounter++;
+		{
+			std::lock_guard<std::mutex> lock(mutex); 
+			std::cout << "\rProgress: " << std::fixed << std::setprecision(3) << progressCounter * 100.00 / polygons.size() << "%" << std::flush;
+		}
+	});
+
+	{
+		std::lock_guard<std::mutex> lock(mutex); 
+		mesh.polygons = newPolygons;
 	}
-	std::cout << "" << std::endl;
 
-	// Update the mesh with the modified polygon list
-	mesh.polygons = newPolygons;
-
-	PCL_INFO("Saving mesh... \n");
-	pcl::io::savePolygonFileVTK(resource_path_ + "/mesh2.vtk", mesh);
+	PCL_INFO("\nSaving mesh... \n");
+	pcl::io::savePolygonFileVTK(resource_path_ + "/mesh3.vtk", mesh);
 	PCL_INFO("Mesh saved \n");
 }
 

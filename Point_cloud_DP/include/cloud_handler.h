@@ -19,6 +19,11 @@
 #include <pcl/io/vtk_lib_io.h>
 #include <pcl/surface/poisson.h>
 #include <pcl/common/distances.h>
+#include <pcl/Vertices.h>
+
+#include <execution>
+#include <vector>
+#include <algorithm>
 
 class CloudHandler
 {

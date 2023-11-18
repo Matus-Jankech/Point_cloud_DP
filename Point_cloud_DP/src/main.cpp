@@ -137,7 +137,7 @@ void visualize_mesh()
 	CloudHandler cloud_handler;
 	pcl::PolygonMesh::Ptr mesh(new pcl::PolygonMesh);
 
-	cloud_handler.load_mesh(mesh, "mesh2.vtk");
+	cloud_handler.load_mesh(mesh, "mesh3.vtk");
 	cloud_handler.show_mesh(mesh);
 }
 
@@ -145,7 +145,7 @@ int main(int argc, char** argv)
 {	
 	//downsample_classified_clouds();
 	//visualize_downsampled_cloud();
-	//create_mesh();
+	create_mesh();
 	visualize_mesh();
 	//visualize_inliers_outliers();
 
