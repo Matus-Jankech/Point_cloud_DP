@@ -169,7 +169,7 @@ void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr
 	}
 }
 
-void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
+void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name)
 {
 	// Normal estimation*
 	PCL_INFO("Calculating normal estimation... \n");
@@ -212,11 +212,11 @@ void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cl
 	gp3.reconstruct(triangles);
 
 	PCL_INFO("Saving mesh... \n");
-	pcl::io::savePolygonFileVTK(resource_path_ + "/mesh.vtk", triangles);
+	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name + ".vtk", triangles);
 	PCL_INFO("Mesh saved \n");
 }
 
-void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
+void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name)
 {
 	// Normal estimation*
 	PCL_INFO("Calculating normal estimation... \n");
@@ -255,7 +255,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
 	kdtree.setInputCloud(input_cloud);
 
-	PCL_INFO("Calculating good vertices... \n");
+	PCL_INFO("Calculating bad vertices... \n");
 	std::vector<int> verticesToRemove;
 
 	for (size_t i = 0; i < meshPointCloud->size(); ++i) {
@@ -271,47 +271,52 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 		}
 	}
 	
-
 	PCL_INFO("Removing bad vertices... \n");
 	std::vector<pcl::Vertices>& polygons = mesh.polygons;
-	std::vector<pcl::Vertices> newPolygons;
+	std::vector<pcl::Vertices> new_polygons;
+	std::atomic<int> progressCounter(0);
 	std::mutex mutex;
-	std::atomic<int> progressCounter(0); 
 
-	std::for_each(std::execution::par, std::begin(polygons), std::end(polygons), [&](pcl::Vertices& vertices)
+	std::unordered_set<uint32_t> verticesToRemoveSet(verticesToRemove.begin(), verticesToRemove.end());
+
+	std::for_each(std::execution::par, std::begin(polygons), std::end(polygons), [&](pcl::Vertices& polygon)
 	{
-		pcl::Vertices newVertices;
+		pcl::Vertices new_polygon;
 		std::vector<uint32_t> newIndices;
 
-		for (size_t j = 0; j < vertices.vertices.size(); ++j) {
-			uint32_t vertexIndex = vertices.vertices[j];
-			if (std::find(verticesToRemove.begin(), verticesToRemove.end(), vertexIndex) == verticesToRemove.end()) {
+		for (size_t j = 0; j < polygon.vertices.size(); ++j) {
+			uint32_t vertexIndex = polygon.vertices[j];
+			if (verticesToRemoveSet.find(vertexIndex) == verticesToRemoveSet.end()) {
 				newIndices.push_back(vertexIndex);
+			}
+
+			if (polygon.vertices.size() - (j + 1) + newIndices.size() <= 2) {
+				break;
 			}
 		}
 
-		if (!newIndices.empty()) {
+		if (!newIndices.empty() && newIndices.size() > 2) {
 			for (const auto& index : newIndices) {
-				newVertices.vertices.push_back(index);
+				new_polygon.vertices.push_back(index);
 			}
-			std::lock_guard<std::mutex> lock(mutex); 
-			newPolygons.push_back(newVertices);
+			std::lock_guard<std::mutex> lock(mutex);
+			new_polygons.push_back(new_polygon);
 		}
 
 		progressCounter++;
 		{
-			std::lock_guard<std::mutex> lock(mutex); 
+			std::lock_guard<std::mutex> lock(mutex);
 			std::cout << "\rProgress: " << std::fixed << std::setprecision(3) << progressCounter * 100.00 / polygons.size() << "%" << std::flush;
 		}
 	});
 
 	{
 		std::lock_guard<std::mutex> lock(mutex); 
-		mesh.polygons = newPolygons;
+		mesh.polygons = new_polygons;
 	}
 
 	PCL_INFO("\nSaving mesh... \n");
-	pcl::io::savePolygonFileVTK(resource_path_ + "/mesh3.vtk", mesh);
+	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name + ".vtk", mesh);
 	PCL_INFO("Mesh saved \n");
 }
 

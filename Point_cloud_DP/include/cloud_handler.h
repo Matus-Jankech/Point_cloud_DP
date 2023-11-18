@@ -24,6 +24,7 @@
 #include <execution>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 
 class CloudHandler
 {
@@ -48,8 +49,8 @@ public:
 	void filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK = 50, double std_dev = 4);
 	void DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit);
 	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds);
-	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud);
-	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud);
+	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
+	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 
 private:
 	void calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,

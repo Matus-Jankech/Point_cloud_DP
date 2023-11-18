@@ -129,15 +129,15 @@ void create_mesh()
 
 	cloud_handler.load_cloud<pcl::PointXYZ>(street_downsampled_all, "street_downsampled_all.ply");
 	//cloud_handler.create_mesh_GPT(street_downsampled_all);
-	cloud_handler.create_mesh_Poison(street_downsampled_all);
+	cloud_handler.create_mesh_Poison(street_downsampled_all, "mesh_all");
 }
 
-void visualize_mesh()
+void visualize_mesh(std::string file_name)
 {	
 	CloudHandler cloud_handler;
 	pcl::PolygonMesh::Ptr mesh(new pcl::PolygonMesh);
 
-	cloud_handler.load_mesh(mesh, "mesh3.vtk");
+	cloud_handler.load_mesh(mesh, file_name + ".vtk");
 	cloud_handler.show_mesh(mesh);
 }
 
@@ -145,8 +145,10 @@ int main(int argc, char** argv)
 {	
 	//downsample_classified_clouds();
 	//visualize_downsampled_cloud();
-	create_mesh();
-	visualize_mesh();
+	//create_mesh();
+	visualize_mesh("mesh_all");
+	visualize_mesh("mesh3");
+	visualize_mesh("mesh2");
 	//visualize_inliers_outliers();
 
 	return (0);
