@@ -26,6 +26,10 @@
 #include <algorithm>
 #include <unordered_set>
 
+#include <pcl/segmentation/approximate_progressive_morphological_filter.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/segmentation/extract_clusters.h>
+
 class CloudHandler
 {
 public:
@@ -47,6 +51,7 @@ public:
 
 	// Filtering
 	void filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK = 50, double std_dev = 4);
+	void filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud);
 	void DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit);
 	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds);
 	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);

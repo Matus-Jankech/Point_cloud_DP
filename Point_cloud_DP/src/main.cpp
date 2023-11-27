@@ -141,15 +141,40 @@ void visualize_mesh(std::string file_name)
 	cloud_handler.show_mesh(mesh);
 }
 
+void separate_ground()
+{
+	CloudHandler cloud_handler;
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers, "street_cloud_inliers.ply");
+	cloud_handler.filter_ground_points(inliers);
+
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr objects(new pcl::PointCloud<pcl::PointXYZRGB>);
+	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
+	std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr> normals;
+
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(ground, "street_cloud_ground.ply");
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(objects, "street_cloud_objects.ply");
+	cloud_handler.set_cloud_color(ground, 90, 90, 90);
+
+	clouds.push_back(ground);
+	clouds.push_back(objects);
+
+	cloud_handler.show_clouds(clouds, normals);
+}
+
 int main(int argc, char** argv)
 {	
 	//downsample_classified_clouds();
 	//visualize_downsampled_cloud();
 	//create_mesh();
-	visualize_mesh("mesh_all");
+	/*visualize_mesh("mesh_all");
 	visualize_mesh("mesh3");
-	visualize_mesh("mesh2");
+	visualize_mesh("mesh2");*/
 	//visualize_inliers_outliers();
+
+	separate_ground();
 
 	return (0);
 }

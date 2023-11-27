@@ -28,6 +28,63 @@ void CloudHandler::filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input
 	save_cloud<pcl::PointXYZRGB>(cloud_outliers, "street_cloud_outliers.ply");
 }
 
+void CloudHandler::filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud)
+{
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground_data(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_data(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered_data(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_data_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr combined_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointIndicesPtr ground(new pcl::PointIndices);
+	pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+
+	// Create the pass filtering object
+	pcl::PassThrough<pcl::PointXYZRGB> pass;
+	pass.setInputCloud(input_cloud);
+	pass.setFilterFieldName("z");
+	pass.setFilterLimits(179, 182);
+
+	pcl::copyPointCloud(*input_cloud, *filtered_data);
+	pass.setNegative(false);
+	pass.filter(*filtered_data);
+
+	// Create the filtering object
+	std::cerr << "Calculating morp filter..." << std::endl;
+	pcl::ApproximateProgressiveMorphologicalFilter<pcl::PointXYZRGB> morph_fil;
+	morph_fil.setInputCloud(filtered_data);
+	morph_fil.setCellSize(0.1);
+	morph_fil.setMaxWindowSize(16);
+	morph_fil.setSlope(3);
+	morph_fil.setInitialDistance(0.13);
+	morph_fil.setMaxDistance(0.3);
+	morph_fil.setNumberOfThreads(8);
+	morph_fil.extract(ground->indices);
+
+	// Extrach ground data
+	pcl::copyPointCloud(*input_cloud, *ground_data);
+	std::cerr << "Filtering ground... " << std::endl;
+	extract.setInputCloud(filtered_data);
+	extract.setIndices(ground);
+	extract.setNegative(false);
+	extract.filter(*ground_data);
+
+	save_cloud<pcl::PointXYZRGB>(ground_data, "street_cloud_ground.ply");
+
+	// Extrach object data
+	pcl::copyPointCloud(*input_cloud, *object_data);
+	std::cerr << "Filtering objects... " << std::endl;
+	extract.setIndices(ground);
+	extract.setNegative(true);
+	extract.filter(*object_data);
+
+	pcl::copyPointCloud(*input_cloud, *object_data_filtered);
+	pass.setNegative(true);
+	pass.filter(*object_data_filtered);
+	*combined_cloud = *object_data + *object_data_filtered;
+
+	save_cloud<pcl::PointXYZRGB>(combined_cloud, "street_cloud_objects.ply");
+}
+
 void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds)
 {	
 	std::vector<double> voxel_sizes = { 0.22, 0.20, 0.18, 0.17, 0.15 };
@@ -278,7 +335,6 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	std::mutex mutex;
 
 	std::unordered_set<uint32_t> verticesToRemoveSet(verticesToRemove.begin(), verticesToRemove.end());
-
 	std::for_each(std::execution::par, std::begin(polygons), std::end(polygons), [&](pcl::Vertices& polygon)
 	{
 		pcl::Vertices new_polygon;
