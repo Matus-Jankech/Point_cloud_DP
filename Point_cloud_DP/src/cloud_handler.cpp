@@ -87,7 +87,7 @@ void CloudHandler::filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& 
 
 void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds)
 {	
-	std::vector<double> voxel_sizes = { 0.22, 0.20, 0.18, 0.17, 0.15 };
+	std::vector<double> voxel_sizes = { 0.12, 0.05, 0.0 };
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_all(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::VoxelGrid<pcl::PointXYZRGB> sor;
@@ -95,14 +95,24 @@ void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRG
 	unsigned int index = 0;
 	for (pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_cloud : input_clouds)
 	{	
-		pcl::copyPointCloud(*input_cloud, *cloud_downsampled);
-		sor.setInputCloud(input_cloud);
-		sor.setLeafSize(voxel_sizes[index], voxel_sizes[index], voxel_sizes[index]);
-		sor.filter(*cloud_downsampled);
-		*cloud_all = *cloud_all + *cloud_downsampled;
+		if(voxel_sizes[index] != 0.0)
+		{
+			pcl::copyPointCloud(*input_cloud, *cloud_downsampled);
+			sor.setInputCloud(input_cloud);
+			sor.setLeafSize(voxel_sizes[index], voxel_sizes[index], voxel_sizes[index]);
+			sor.filter(*cloud_downsampled);
+			*cloud_all = *cloud_all + *cloud_downsampled;
 
-		std::string file_name = "street_downsampled_" + std::to_string(index) + ".ply";
-		save_cloud<pcl::PointXYZRGB>(cloud_downsampled, file_name);
+			std::string file_name = "street_downsampled_" + std::to_string(index) + ".ply";
+			save_cloud<pcl::PointXYZRGB>(cloud_downsampled, file_name);
+		}
+		else {
+			*cloud_all = *cloud_all + *input_cloud;
+			std::string file_name = "street_downsampled_" + std::to_string(index) + ".ply";
+			save_cloud<pcl::PointXYZRGB>(input_cloud, file_name);
+			std::cout << "bong" << std::endl;
+		}
+
 		index++;
 	}
 
@@ -149,8 +159,8 @@ void CloudHandler::calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_c
 
 void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit)
 {	
-	std::vector<double> lower_threshold = { 0.0, 0.1, 0.2, 0.3, 0.4 };
-	std::vector<double> upper_threshold = { 0.1, 0.2, 0.3, 0.4, 1.0 };
+	std::vector<double> lower_threshold = { 0.0, 0.15, 0.3};
+	std::vector<double> upper_threshold = { 0.15, 0.3, 1};
 
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_small(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_large(new pcl::PointCloud<pcl::PointNormal>);
@@ -303,7 +313,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	poisson.reconstruct(mesh);
 
 	// Define your threshold distance
-	const double distanceThreshold = 0.05; 
+	const double distanceThreshold = 0.08; 
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr meshPointCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::fromPCLPointCloud2(mesh.cloud, *meshPointCloud);
