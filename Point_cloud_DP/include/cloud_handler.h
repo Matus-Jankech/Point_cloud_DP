@@ -40,12 +40,11 @@ class CloudHandler
 public:
 	CloudHandler();
 
-	// Utilities
+	// Visualization, Saving/Loading, Utilities
 	template <typename PointType>
 	bool load_cloud(typename pcl::PointCloud<PointType>::Ptr& cloud, std::string file_name);
 	template <typename PointType>
 	bool save_cloud(typename pcl::PointCloud<PointType>::Ptr& cloud, std::string file_name);
-
 	void show_cloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud);
 	void show_cloud(pcl::PointCloud<pcl::PointNormal>::Ptr& input_cloud);
 	void show_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds = std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>(),
@@ -53,19 +52,16 @@ public:
 	void set_cloud_color(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int r, int g, int b);
 	bool load_mesh(pcl::PolygonMesh::Ptr& input_mesh, std::string file_name);
 	void show_mesh(pcl::PolygonMesh::Ptr& input_mesh);
-
 	inline void set_base_path(std::string base) { resource_path_ = resource_path_ + "/" + base; }
 
 	// Filtering
 	void filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK = 50, double std_dev = 4);
 	void filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud);
-	void DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit);
 	void downsample_cloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, float leaf_size, std::string file_name);
-	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds);
+	void downsample_objects();
 
 	// Segmentation
 	void cpc_segmentation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr& input_cloud, bool visualize = false);
-	void separate_segmented_clouds(bool visualize = false);
 
 	// Mash
 	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
@@ -78,6 +74,10 @@ private:
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& don_cloud,
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_small,
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large);
+	void separate_segmented_clouds(bool visualize = false);
+	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds, std::string file_name);
+	void adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit, std::string file_name);
+	int find_max_object_index();
 
 public:
 	std::string resource_path_ = "C:/Users/admin/Documents/Visual Studio 2022/Projects/Point_cloud_DP/Resources";

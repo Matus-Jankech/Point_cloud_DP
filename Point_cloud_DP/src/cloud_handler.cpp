@@ -97,7 +97,35 @@ void CloudHandler::downsample_cloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& inpu
 	save_cloud<pcl::PointXYZRGB>(cloud_downsampled, file_name);
 }
 
-void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds)
+double calculateAverageDistance(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud) {
+	pcl::KdTreeFLANN<pcl::PointXYZRGB> kdtree;
+	kdtree.setInputCloud(cloud);
+
+	double total_distance = 0.0;
+	int total_pairs = 0;
+
+	for (size_t i = 0; i < cloud->size(); ++i) {
+		std::vector<int> indices(2);
+		std::vector<float> sqr_distances(2);
+
+		if (kdtree.nearestKSearch((*cloud)[i], 2, indices, sqr_distances) > 0) {
+			// Exclude the point itself by taking the second closest point
+			if (indices[1] != static_cast<int>(i)) {
+				total_distance += sqrt(sqr_distances[1]); // sqrt to get actual distance
+				total_pairs++;
+			}
+		}
+	}
+
+	if (total_pairs > 0) {
+		return total_distance / static_cast<double>(total_pairs);
+	}
+	else {
+		return 0.0; // Return 0 if no pairs found (or just one point)
+	}
+}
+
+void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds, std::string file_name)
 {	
 	std::vector<double> voxel_sizes = { 0.12, 0.05, 0.0 };
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -114,20 +142,15 @@ void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRG
 			sor.setLeafSize(voxel_sizes[index], voxel_sizes[index], voxel_sizes[index]);
 			sor.filter(*cloud_downsampled);
 			*cloud_all = *cloud_all + *cloud_downsampled;
-
-			std::string file_name = "street_downsampled_" + std::to_string(index) + ".ply";
-			save_cloud<pcl::PointXYZRGB>(cloud_downsampled, file_name);
 		}
 		else {
 			*cloud_all = *cloud_all + *input_cloud;
-			std::string file_name = "street_downsampled_" + std::to_string(index) + ".ply";
-			save_cloud<pcl::PointXYZRGB>(input_cloud, file_name);
 		}
 
 		index++;
 	}
 
-	save_cloud<pcl::PointXYZRGB>(cloud_all, "street_downsampled_all.ply");
+	save_cloud<pcl::PointXYZRGB>(cloud_all, file_name);
 }
 
 void CloudHandler::calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
@@ -142,7 +165,6 @@ void CloudHandler::calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB
 	ne.setSearchMethod(tree);
 	ne.setRadiusSearch(limit); // Use all neighbors in a sphere of radius 5cm
 	ne.compute(*cloud_normals);
-	save_cloud<pcl::PointNormal>(cloud_normals, normals_file);
 }
 
 void CloudHandler::calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
@@ -165,10 +187,55 @@ void CloudHandler::calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_c
 
 	std::cout << "Calculating DoN... " << std::endl;
 	don.computeFeature(*don_cloud);
-	save_cloud<pcl::PointNormal>(don_cloud, "don.pcd");
+	//save_cloud<pcl::PointNormal>(don_cloud, "don.pcd");
 }
 
-void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit)
+int CloudHandler::find_max_object_index()
+{
+	std::string directory_path = resource_path_ + "/Objects";
+	int max_object_number = -1;
+
+	std::filesystem::directory_iterator dir_iter(directory_path);
+	for (const auto& entry : dir_iter) {
+		if (!entry.is_directory()) {
+			std::string filename = entry.path().filename().string();
+
+			if (filename.find("object_") == 0 && filename.find(".ply") != std::string::npos) {
+				try {
+					int object_num = std::stoi(filename.substr(7, filename.find(".ply") - 7));
+
+					if (object_num > max_object_number) {
+						max_object_number = object_num;
+					}
+				}
+				catch (...) {
+					std::cerr << "Error converting filename to number: " << filename << std::endl;
+				}
+			}
+		}
+	}
+
+	return max_object_number;
+}
+
+void CloudHandler::downsample_objects()
+{
+	int max_object_index = find_max_object_index();
+	max_object_index = max_object_index + 1;
+
+	for (int i = 0; i < max_object_index; i++)
+	{
+		pcl::PointCloud<pcl::PointXYZRGB>::Ptr object(new pcl::PointCloud<pcl::PointXYZRGB>);
+		std::string in_name = "Objects/object_" + std::to_string(i) + ".ply";
+		std::string out_name = "Objects/object_" + std::to_string(i) + "_downsampled.ply";
+
+		std::cout << "\n";
+		load_cloud<pcl::PointXYZRGB>(object, in_name);
+		adaptive_downsampling(object, 0.03, 0.30, out_name);
+	}
+}
+
+void CloudHandler::adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit, std::string file_name)
 {	
 	std::vector<double> lower_threshold = { 0.0, 0.15, 0.3};
 	std::vector<double> upper_threshold = { 0.15, 0.3, 1};
@@ -176,34 +243,22 @@ void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_small(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_large(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr don_cloud(new pcl::PointCloud<pcl::PointNormal>);
+	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds_to_downsample;
 
-	// Get DoN
-	std::string large_normals_file = "normlas_" + std::to_string(upper_limit) + ".pcd";
-	std::string small_normals_file = "normlas_" + std::to_string(lower_limit) + ".pcd";
-
-	// Get normlas estimation
-	if (load_cloud<pcl::PointNormal>(cloud_normals_large, large_normals_file) == false)
-	{
-		std::cerr << "Could not load normals estimation "<< large_normals_file << ", calculating new one..." << std::endl;
-		calculate_normals_estimation(input_cloud, cloud_normals_large, upper_limit);
-	}
-	if (load_cloud<pcl::PointNormal>(cloud_normals_small, small_normals_file) == false)
-	{
-		std::cerr << "Could not load normals estimation " << small_normals_file << ", calculating new one..." << std::endl;
-		calculate_normals_estimation(input_cloud, cloud_normals_small, lower_limit);
-	}
-
+	// Get normlas estimation + DoN
+	calculate_normals_estimation(input_cloud, cloud_normals_large, upper_limit);
+	calculate_normals_estimation(input_cloud, cloud_normals_small, lower_limit);
 	calculate_don(input_cloud, don_cloud, cloud_normals_small, cloud_normals_large);
 
-
-	// Build the filter
-	pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_filtered(new pcl::PointCloud<pcl::PointNormal>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::copyPointCloud(*input_cloud, *doncloud_filtered);
-	pcl::copyPointCloud(*input_cloud, *cloud_filtered);
 	
 	for (int i = 0; i < lower_threshold.size(); i++)
 	{	
+		// Build the filter
+		pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_filtered(new pcl::PointCloud<pcl::PointNormal>);
+		pcl::copyPointCloud(*input_cloud, *doncloud_filtered);
+		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+		pcl::copyPointCloud(*input_cloud, *cloud_filtered);
+
 		pcl::ConditionAnd<pcl::PointNormal>::Ptr range_cond(new pcl::ConditionAnd<pcl::PointNormal>());
 		range_cond->addComparison(pcl::FieldComparison<pcl::PointNormal>::ConstPtr(
 			new pcl::FieldComparison<pcl::PointNormal>("curvature", pcl::ComparisonOps::GE, lower_threshold[i])));
@@ -213,7 +268,6 @@ void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr
 		pcl::ConditionalRemoval<pcl::PointNormal> condrem;
 		condrem.setInputCloud(don_cloud);
 		condrem.setCondition(range_cond);
-		std::cout << "Filtering class " << i << "..." << std::endl;
 		condrem.filter(*doncloud_filtered);
 
 		pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
@@ -241,10 +295,10 @@ void CloudHandler::DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr
 		extract.setIndices(inliers);
 		extract.setNegative(false);
 		extract.filter(*cloud_filtered);
-
-		std::string file_name = "street_classified_" + std::to_string(i) + ".ply";
-		save_cloud<pcl::PointXYZRGB>(cloud_filtered, file_name);
+		clouds_to_downsample.push_back(cloud_filtered);
 	}
+
+	downsample_clouds(clouds_to_downsample, file_name);
 }
 
 void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name)

@@ -1,32 +1,5 @@
 #include <cloud_handler.h>
 
-void classify_cloud()
-{
-	CloudHandler cloud_handler;
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers_cloud, "street_cloud_inliers.ply");
-	cloud_handler.DoN_based_segmentation(inliers_cloud, 0.03, 0.30);
-}
-
-void downsample_classified_clouds()
-{
-	CloudHandler cloud_handler;
-	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds_to_downsample;
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class0(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class1(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class2(new pcl::PointCloud<pcl::PointXYZRGB>);
-
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class0, "street_classified_0.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class1, "street_classified_1.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class2, "street_classified_2.ply");
-	clouds_to_downsample.push_back(class0);
-	clouds_to_downsample.push_back(class1);
-	clouds_to_downsample.push_back(class2);
-
-	cloud_handler.downsample_clouds(clouds_to_downsample);
-}
-
 void visualize_inliers_outliers()
 {	
 	CloudHandler cloud_handler;
@@ -135,33 +108,6 @@ void visualize_cloud(std::string file_name)
 	cloud_handler.show_cloud(cloud);
 }
 
-void car()
-{
-	CloudHandler cloud_handler;
-	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds_to_downsample;
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr car(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class0(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class1(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class2(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr all(new pcl::PointCloud<pcl::PointXYZRGB>);
-
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(car, "car.ply");
-	cloud_handler.DoN_based_segmentation(car, 0.03, 0.20);
-
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class0, "street_classified_0.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class1, "street_classified_1.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class2, "street_classified_2.ply");
-	cloud_handler.set_cloud_color(class1, 0, 0, 255);
-	cloud_handler.set_cloud_color(class2, 0, 255, 0);
-	clouds_to_downsample.push_back(class0);
-	clouds_to_downsample.push_back(class1);
-	clouds_to_downsample.push_back(class2);
-
-	cloud_handler.downsample_clouds(clouds_to_downsample);
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(all, "street_downsampled_all.ply");
-	cloud_handler.show_cloud(all);
-}
-
 void calculate_all()
 {
 	CloudHandler cloud_handler;
@@ -186,9 +132,14 @@ void calculate_all()
 	//cloud_handler.create_mesh_Poison(ground_downsampled, "ground_mesh.vtk");
 
 	// SEGMENT OBJECTS + CREATE MESH
-	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr objects(new pcl::PointCloud<pcl::PointXYZRGBA>);
+	/*pcl::PointCloud<pcl::PointXYZRGBA>::Ptr objects(new pcl::PointCloud<pcl::PointXYZRGBA>);
 	cloud_handler.load_cloud<pcl::PointXYZRGBA>(objects, "street_cloud_objects.ply");
-	cloud_handler.cpc_segmentation(objects, true);
+	cloud_handler.cpc_segmentation(objects, true);*/
+	cloud_handler.downsample_objects();
+
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr object48(new pcl::PointCloud<pcl::PointXYZRGB>);
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(object48, "Objects/object_48.ply");
+	cloud_handler.show_cloud(object48);
 }
 
 int main(int argc, char** argv)
