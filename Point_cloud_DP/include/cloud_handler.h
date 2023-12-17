@@ -30,6 +30,11 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/segmentation/extract_clusters.h>
 
+#include <pcl/segmentation/supervoxel_clustering.h>
+#include <vtkPolyLine.h>
+#include <pcl/segmentation/cpc_segmentation.h>
+#include <filesystem>
+
 class CloudHandler
 {
 public:
@@ -49,11 +54,20 @@ public:
 	bool load_mesh(pcl::PolygonMesh::Ptr& input_mesh, std::string file_name);
 	void show_mesh(pcl::PolygonMesh::Ptr& input_mesh);
 
+	inline void set_base_path(std::string base) { resource_path_ = resource_path_ + "/" + base; }
+
 	// Filtering
 	void filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK = 50, double std_dev = 4);
 	void filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud);
 	void DoN_based_segmentation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit);
+	void downsample_cloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, float leaf_size, std::string file_name);
 	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds);
+
+	// Segmentation
+	void cpc_segmentation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr& input_cloud, bool visualize = false);
+	void separate_segmented_clouds(bool visualize = false);
+
+	// Mash
 	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 
@@ -65,8 +79,11 @@ private:
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_small,
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large);
 
-private:
+public:
 	std::string resource_path_ = "C:/Users/admin/Documents/Visual Studio 2022/Projects/Point_cloud_DP/Resources";
+
+private:
+	std::vector<std::array<int, 3>> segment_colors_ = { {255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}, {255, 0, 255}, {0, 255, 255}, {128, 0, 0}, {0, 128, 0}, {0, 0, 128}, {0, 128, 128}, {128, 128, 0}, {128, 0, 128}, {0, 128, 128}, {128, 128, 128}, {255, 165, 0}, {128, 0, 0}, {128, 128, 0}, {0, 128, 0}, {128, 128, 128}, {165, 42, 42}, {255, 192, 203}, {255, 20, 147}, {0, 255, 127}, {139, 0, 139}, {255, 255, 255}, {0, 255, 255}, {255, 140, 0}, {255, 255, 0}, {106, 90, 205}, {255, 69, 0}, {0, 250, 154} };
 
 };
 

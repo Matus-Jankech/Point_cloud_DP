@@ -85,6 +85,18 @@ void CloudHandler::filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& 
 	save_cloud<pcl::PointXYZRGB>(combined_cloud, "street_cloud_objects.ply");
 }
 
+void CloudHandler::downsample_cloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, float leaf_size, std::string file_name)
+{
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::copyPointCloud(*input_cloud, *cloud_downsampled);
+
+	pcl::VoxelGrid<pcl::PointXYZRGB> sor;
+	sor.setInputCloud(input_cloud);
+	sor.setLeafSize(leaf_size, leaf_size, leaf_size);
+	sor.filter(*cloud_downsampled);
+	save_cloud<pcl::PointXYZRGB>(cloud_downsampled, file_name);
+}
+
 void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds)
 {	
 	std::vector<double> voxel_sizes = { 0.12, 0.05, 0.0 };
@@ -110,7 +122,6 @@ void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRG
 			*cloud_all = *cloud_all + *input_cloud;
 			std::string file_name = "street_downsampled_" + std::to_string(index) + ".ply";
 			save_cloud<pcl::PointXYZRGB>(input_cloud, file_name);
-			std::cout << "bong" << std::endl;
 		}
 
 		index++;
@@ -341,6 +352,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	PCL_INFO("Removing bad vertices... \n");
 	std::vector<pcl::Vertices>& polygons = mesh.polygons;
 	std::vector<pcl::Vertices> new_polygons;
+	new_polygons.reserve(polygons.size());
 	std::atomic<int> progressCounter(0);
 	std::mutex mutex;
 
@@ -353,7 +365,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 		for (size_t j = 0; j < polygon.vertices.size(); ++j) {
 			uint32_t vertexIndex = polygon.vertices[j];
 			if (verticesToRemoveSet.find(vertexIndex) == verticesToRemoveSet.end()) {
-				newIndices.push_back(vertexIndex);
+				newIndices.emplace_back(vertexIndex);
 			}
 
 			if (polygon.vertices.size() - (j + 1) + newIndices.size() <= 2) {
@@ -363,10 +375,10 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 
 		if (!newIndices.empty() && newIndices.size() > 2) {
 			for (const auto& index : newIndices) {
-				new_polygon.vertices.push_back(index);
+				new_polygon.vertices.emplace_back(index);
 			}
 			std::lock_guard<std::mutex> lock(mutex);
-			new_polygons.push_back(new_polygon);
+			new_polygons.emplace_back(new_polygon);
 		}
 
 		progressCounter++;
@@ -382,8 +394,172 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	}
 
 	PCL_INFO("\nSaving mesh... \n");
-	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name + ".vtk", mesh);
+	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, mesh);
 	PCL_INFO("Mesh saved \n");
+}
+
+void CloudHandler::cpc_segmentation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr& input_cloud, bool visualize)
+{	
+	float voxel_resolution = 0.1f;
+	float seed_resolution = 1.0f;
+	float color_importance = 0.1f;
+	float spatial_importance = 0.2f;
+	float normal_importance = 1.0f;
+
+	pcl::SupervoxelClustering<pcl::PointXYZRGBA> super(voxel_resolution, seed_resolution);
+	super.setUseSingleCameraTransform(false);
+	super.setInputCloud(input_cloud);
+	super.setColorImportance(color_importance);
+	super.setSpatialImportance(spatial_importance);
+	super.setNormalImportance(normal_importance);
+
+	std::map <std::uint32_t, pcl::Supervoxel<pcl::PointXYZRGBA>::Ptr > supervoxel_clusters;
+
+	pcl::console::print_highlight("Extracting supervoxels!\n");
+	super.extract(supervoxel_clusters);
+	pcl::console::print_info("Found %d supervoxels\n", supervoxel_clusters.size());
+
+	pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+	viewer->setBackgroundColor(0, 0, 0);
+
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr voxel_centroid_cloud = super.getVoxelCentroidCloud();
+	viewer->addPointCloud(voxel_centroid_cloud, "voxel centroids");
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2.0, "voxel centroids");
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.95, "voxel centroids");
+
+	pcl::PointCloud<pcl::PointXYZL>::Ptr labeled_voxel_cloud = super.getLabeledVoxelCloud();
+	viewer->addPointCloud(labeled_voxel_cloud, "labeled voxels");
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.8, "labeled voxels");
+
+	pcl::PointCloud<pcl::PointNormal>::Ptr sv_normal_cloud = super.makeSupervoxelNormalCloud(supervoxel_clusters);
+
+	pcl::console::print_highlight("Getting supervoxel adjacency\n");
+	std::multimap<std::uint32_t, std::uint32_t> supervoxel_adjacency;
+	super.getSupervoxelAdjacency(supervoxel_adjacency);
+
+	if (visualize)
+	{
+		while (!viewer->wasStopped()){ viewer->spinOnce(100); }
+	}
+
+	pcl::PCLPointCloud2 input_pointcloud2;
+	pcl::toPCLPointCloud2(*input_cloud, input_pointcloud2);
+
+	int concavity_tolerance_threshold = 15;
+	int max_cuts = 25;
+	int cutting_min_segments = 300; // Min number of segments to be valid
+	int min_segment_size = 150;
+	int ransac_iterations = 3000;
+	int k_factor = 0.0;
+	float min_cut_score = 0.3;
+	float smoothness_threshold = 0.1;
+
+	bool use_sanity_criterion = false;
+	bool use_local_constrain = true;
+	bool use_directed_cutting = false;
+	bool use_clean_cutting = true;
+
+	PCL_INFO("Starting Segmentation\n");
+	pcl::CPCSegmentation<pcl::PointXYZRGBA> cpc;
+	cpc.setConcavityToleranceThreshold(concavity_tolerance_threshold);
+	cpc.setSanityCheck(use_sanity_criterion);
+	cpc.setCutting(max_cuts, cutting_min_segments, min_cut_score, use_local_constrain, use_directed_cutting, use_clean_cutting);
+	cpc.setRANSACIterations(ransac_iterations);
+	cpc.setSmoothnessCheck(true, voxel_resolution, seed_resolution, smoothness_threshold);
+	cpc.setKFactor(k_factor);
+	cpc.setInputSupervoxels(supervoxel_clusters, supervoxel_adjacency);
+	cpc.setMinSegmentSize(min_segment_size);
+	cpc.segment();
+
+	PCL_INFO("Interpolation voxel cloud -> input cloud and relabeling\n");
+	pcl::PointCloud<pcl::PointXYZL>::Ptr sv_labeled_cloud = super.getLabeledCloud();
+	pcl::PointCloud<pcl::PointXYZL>::Ptr cpc_labeled_cloud = sv_labeled_cloud->makeShared();
+	cpc.relabelCloud(*cpc_labeled_cloud);
+	pcl::LCCPSegmentation<pcl::PointXYZRGBA>::SupervoxelAdjacencyList sv_adjacency_list;
+	cpc.getSVAdjacencyList(sv_adjacency_list);  // Needed for visualization
+
+	/// Creating Colored Clouds and Output
+	if (cpc_labeled_cloud->size() == input_cloud->size())
+	{
+		PCL_INFO("Saving output\n");
+
+		if (pcl::getFieldIndex(input_pointcloud2, "label") >= 0)
+			PCL_WARN("Input cloud already has a label field. It will be overwritten by the cpc segmentation output.\n");
+		pcl::PCLPointCloud2 output_label_cloud2, output_concat_cloud2;
+		pcl::toPCLPointCloud2(*cpc_labeled_cloud, output_label_cloud2);
+		pcl::concatenateFields(input_pointcloud2, output_label_cloud2, output_concat_cloud2);
+		pcl::io::savePCDFile(resource_path_ + "/" + "segment_cloud.pcd", output_concat_cloud2, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), true);
+		separate_segmented_clouds(visualize);
+	}
+	else
+	{
+		PCL_ERROR("ERROR:: Sizes of input cloud and labeled supervoxel cloud do not match. No output is produced.\n");
+	}
+}
+
+void CloudHandler::separate_segmented_clouds(bool visualize)
+{
+	pcl::PointCloud<pcl::PointXYZRGBL>::Ptr segmented_cloud(new pcl::PointCloud<pcl::PointXYZRGBL>);
+	load_cloud<pcl::PointXYZRGBL>(segmented_cloud, "/segment_cloud.pcd");
+
+	std::map<int, pcl::PointCloud<pcl::PointXYZRGBL>::Ptr> labelCloudMap;
+
+	for (const auto& point : *segmented_cloud) {
+		int label = static_cast<int>(point.label);
+
+		if (labelCloudMap.find(label) == labelCloudMap.end()) {
+			labelCloudMap[label] = pcl::PointCloud<pcl::PointXYZRGBL>::Ptr(new pcl::PointCloud<pcl::PointXYZRGBL>);
+		}
+
+		labelCloudMap[label]->push_back(point);
+	}
+
+	int colorIndex = 0;
+	int total = 0;
+	int num_objects = 0;
+	int min_num_of_points = 150;
+
+	std::string directory = resource_path_ + "/Objects/";
+	if (!std::filesystem::exists(directory)) {
+		std::filesystem::create_directory(directory);
+	}
+
+	pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("Segmented cloud"));
+	for (const auto& pair : labelCloudMap) {
+		std::string label_name = "Label_" + std::to_string(pair.first);
+		std::string object_name = "object_" + std::to_string(num_objects);
+
+		std::array<int, 3> color = segment_colors_[colorIndex % segment_colors_.size()];
+		if (pair.second->size() > min_num_of_points)
+		{
+			if (visualize)
+			{
+				pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGBL> color_handler(pair.second, color[0], color[1], color[2]);
+				viewer->addPointCloud(pair.second, color_handler, label_name);
+			}
+
+			pcl::PointCloud<pcl::PointXYZRGBL>::Ptr object(new pcl::PointCloud<pcl::PointXYZRGBL>);
+			object = pair.second;
+			save_cloud<pcl::PointXYZRGBL>(object,"Objects/" + object_name + ".ply");
+
+			total = total + pair.second->size();
+			num_objects++;
+			colorIndex++;
+		}
+	}
+	std::cout << "Total objects: " << num_objects << " ,size: " << total << std::endl;
+
+	if (visualize)
+	{
+		pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
+		load_cloud<pcl::PointXYZRGB>(ground, "street_cloud_ground.ply");
+		set_cloud_color(ground, 80, 80, 80);
+		viewer->addPointCloud(ground, "ground");
+
+		while (!viewer->wasStopped()) { viewer->spinOnce(100); }
+	}
+	
+	return;
 }
 
 void CloudHandler::set_cloud_color(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int r, int g, int b)
