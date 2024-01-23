@@ -66,6 +66,7 @@ public:
 	// Mash
 	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
+	void create_mesh_objects();
 
 private:
 	void calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,

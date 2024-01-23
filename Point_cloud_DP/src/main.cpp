@@ -108,6 +108,17 @@ void visualize_cloud(std::string file_name)
 	cloud_handler.show_cloud(cloud);
 }
 
+void poissonTest()
+{
+	CloudHandler cloud_handler;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+	cloud_handler.load_cloud<pcl::PointXYZ>(cloud, "Presenation/car.ply");
+	cloud_handler.create_mesh_Poison(cloud, "car_test.vtk");
+
+	visualize_mesh("car_test");
+}
+
 void calculate_all()
 {
 	CloudHandler cloud_handler;
@@ -131,15 +142,16 @@ void calculate_all()
 	//cloud_handler.load_cloud<pcl::PointXYZ>(ground_downsampled, "street_cloud_ground_downsampled.ply");
 	//cloud_handler.create_mesh_Poison(ground_downsampled, "ground_mesh.vtk");
 
-	// SEGMENT OBJECTS + CREATE MESH
-	/*pcl::PointCloud<pcl::PointXYZRGBA>::Ptr objects(new pcl::PointCloud<pcl::PointXYZRGBA>);
-	cloud_handler.load_cloud<pcl::PointXYZRGBA>(objects, "street_cloud_objects.ply");
-	cloud_handler.cpc_segmentation(objects, true);*/
-	cloud_handler.downsample_objects();
+	//// SEGMENT OBJECTS + CREATE MESH
+	//pcl::PointCloud<pcl::PointXYZRGBA>::Ptr objects(new pcl::PointCloud<pcl::PointXYZRGBA>);
+	//cloud_handler.load_cloud<pcl::PointXYZRGBA>(objects, "street_cloud_objects.ply");
+	//cloud_handler.cpc_segmentation(objects, true);
+	//cloud_handler.downsample_objects();
+	//cloud_handler.create_mesh_objects();
 
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr object48(new pcl::PointCloud<pcl::PointXYZRGB>);
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(object48, "Objects/object_48.ply");
-	cloud_handler.show_cloud(object48);
+	poissonTest();
+	//visualize_mesh("car_test");
+	//visualize_mesh("Presenation/mesh_Poisson1");
 }
 
 int main(int argc, char** argv)

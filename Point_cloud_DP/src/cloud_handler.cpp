@@ -378,7 +378,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	poisson.reconstruct(mesh);
 
 	// Define your threshold distance
-	const double distanceThreshold = 0.08; 
+	const double distanceThreshold = 0.01; 
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr meshPointCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::fromPCLPointCloud2(mesh.cloud, *meshPointCloud);
@@ -402,7 +402,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 			}
 		}
 	}
-	
+
 	PCL_INFO("Removing bad vertices... \n");
 	std::vector<pcl::Vertices>& polygons = mesh.polygons;
 	std::vector<pcl::Vertices> new_polygons;
@@ -450,6 +450,23 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	PCL_INFO("\nSaving mesh... \n");
 	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, mesh);
 	PCL_INFO("Mesh saved \n");
+}
+
+void CloudHandler::create_mesh_objects()
+{
+	int max_object_index = find_max_object_index();
+	max_object_index = max_object_index + 1;
+
+	for (int i = 0; i < max_object_index; i++)
+	{
+		pcl::PointCloud<pcl::PointXYZ>::Ptr object(new pcl::PointCloud<pcl::PointXYZ>);
+		std::string in_name = "Objects/object_" + std::to_string(i) + "_downsampled.ply";
+		std::string out_name = "Objects/object_" + std::to_string(i) + "_mesh.vtk";
+
+		std::cout << "\n";
+		load_cloud<pcl::PointXYZ>(object, in_name);
+		create_mesh_Poison(object, out_name);
+	}
 }
 
 void CloudHandler::cpc_segmentation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr& input_cloud, bool visualize)
