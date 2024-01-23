@@ -367,7 +367,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 
 	pcl::Poisson<pcl::PointNormal> poisson;
 	poisson.setInputCloud(cloud_with_normals); // Set your input point cloud
-	poisson.setDepth(13); // Set the depth level of the Octree
+	poisson.setDepth(9); // Set the depth level of the Octree
 	poisson.setSolverDivide(50);
 	poisson.setIsoDivide(50);
 	poisson.setThreads(8);
@@ -384,7 +384,6 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	pcl::fromPCLPointCloud2(mesh.cloud, *meshPointCloud);
 
 	PCL_INFO("Removing bad vertices... \n");
-	auto start_time = std::chrono::high_resolution_clock::now();
 	std::vector<pcl::Vertices>& polygons = mesh.polygons;
 	std::vector<pcl::Vertices> new_polygons;
 	new_polygons.reserve(polygons.size());
@@ -459,6 +458,26 @@ void CloudHandler::create_mesh_objects()
 		load_cloud<pcl::PointXYZ>(object, in_name);
 		create_mesh_Poison(object, out_name);
 	}
+
+	std::vector<pcl::PolygonMesh::Ptr> meshes;
+	for (int i = 0; i < max_object_index; i++)
+	{
+		pcl::PolygonMesh::Ptr object(new pcl::PolygonMesh);
+		std::string file_name = "Objects/object_" + std::to_string(i) + "_mesh.vtk";
+
+		if (load_mesh(object, file_name)) {
+			meshes.push_back(object);
+		}
+	}
+
+	pcl::PolygonMesh::Ptr result_mesh(new pcl::PolygonMesh);
+	for (const auto& mesh : meshes) {
+		*result_mesh += *mesh;
+	}
+
+	PCL_INFO("\nSaving mesh... \n");
+	pcl::io::savePolygonFileVTK(resource_path_ + "/street_cloud_mesh.vtk", *result_mesh);
+	PCL_INFO("Mesh saved \n");
 }
 
 void CloudHandler::cpc_segmentation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr& input_cloud, bool visualize)

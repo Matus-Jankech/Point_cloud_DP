@@ -148,6 +148,7 @@ void calculate_all()
 	//cloud_handler.cpc_segmentation(objects, true);
 	//cloud_handler.downsample_objects();
 	//cloud_handler.create_mesh_objects();
+	visualize_mesh("Street_cloud/street_cloud_mesh");
 
 	//// TESTING
 	//poissonTest();
