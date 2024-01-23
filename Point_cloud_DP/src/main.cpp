@@ -149,7 +149,8 @@ void calculate_all()
 	//cloud_handler.downsample_objects();
 	//cloud_handler.create_mesh_objects();
 
-	poissonTest();
+	//// TESTING
+	//poissonTest();
 	//visualize_mesh("car_test");
 	//visualize_mesh("Presenation/mesh_Poisson1");
 }

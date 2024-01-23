@@ -383,34 +383,18 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	pcl::PointCloud<pcl::PointXYZ>::Ptr meshPointCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::fromPCLPointCloud2(mesh.cloud, *meshPointCloud);
 
-	// Create KD-Tree for the input cloud
-	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-	kdtree.setInputCloud(input_cloud);
-
-	PCL_INFO("Calculating bad vertices... \n");
-	std::vector<int> verticesToRemove;
-
-	for (size_t i = 0; i < meshPointCloud->size(); ++i) {
-		// Search for the closest point in the input cloud to the current point in the mesh
-		std::vector<int> nearest_indices(1);
-		std::vector<float> nearest_distances(1);
-
-		pcl::PointXYZ searchPoint = meshPointCloud->at(i);
-		if (kdtree.nearestKSearch(searchPoint, 1, nearest_indices, nearest_distances) > 0) {
-			if (nearest_distances[0] > distanceThreshold) {
-				verticesToRemove.push_back(i);
-			}
-		}
-	}
-
 	PCL_INFO("Removing bad vertices... \n");
+	auto start_time = std::chrono::high_resolution_clock::now();
 	std::vector<pcl::Vertices>& polygons = mesh.polygons;
 	std::vector<pcl::Vertices> new_polygons;
 	new_polygons.reserve(polygons.size());
 	std::atomic<int> progressCounter(0);
 	std::mutex mutex;
 
-	std::unordered_set<uint32_t> verticesToRemoveSet(verticesToRemove.begin(), verticesToRemove.end());
+	// Create KD-Tree for the input cloud
+	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+	kdtree.setInputCloud(input_cloud);
+
 	std::for_each(std::execution::par, std::begin(polygons), std::end(polygons), [&](pcl::Vertices& polygon)
 	{
 		pcl::Vertices new_polygon;
@@ -418,10 +402,18 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 
 		for (size_t j = 0; j < polygon.vertices.size(); ++j) {
 			uint32_t vertexIndex = polygon.vertices[j];
-			if (verticesToRemoveSet.find(vertexIndex) == verticesToRemoveSet.end()) {
-				newIndices.emplace_back(vertexIndex);
+			pcl::PointXYZ searchPoint = meshPointCloud->at(vertexIndex);
+
+			std::vector<int> nearest_indices(1);
+			std::vector<float> nearest_distances(1);
+
+			if (kdtree.nearestKSearch(searchPoint, 1, nearest_indices, nearest_distances) > 0) {
+				if (nearest_distances[0] <= distanceThreshold) {
+					newIndices.emplace_back(vertexIndex);
+				}
 			}
 
+			// Check if there are even 3 vertices to create triangle
 			if (polygon.vertices.size() - (j + 1) + newIndices.size() <= 2) {
 				break;
 			}
