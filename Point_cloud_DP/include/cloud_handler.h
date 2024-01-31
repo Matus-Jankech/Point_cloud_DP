@@ -35,6 +35,11 @@
 #include <pcl/segmentation/cpc_segmentation.h>
 #include <filesystem>
 
+#include <pcl/surface/marching_cubes_hoppe.h>
+#include <pcl/surface/marching_cubes_rbf.h>
+#include <pcl/surface/mls.h>
+#include <pcl/surface/vtk_smoothing/vtk_mesh_smoothing_laplacian.h>
+
 class CloudHandler
 {
 public:
@@ -53,12 +58,15 @@ public:
 	bool load_mesh(pcl::PolygonMesh::Ptr& input_mesh, std::string file_name);
 	void show_mesh(pcl::PolygonMesh::Ptr& input_mesh);
 	inline void set_base_path(std::string base) { resource_path_ = resource_path_ + "/" + base; }
+	int find_max_object_index();
+	void show_mesh_cloud(pcl::PolygonMesh::Ptr& input_mesh, pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud);
 
 	// Filtering
 	void filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK = 50, double std_dev = 4);
 	void filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud);
 	void downsample_cloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, float leaf_size, std::string file_name);
 	void downsample_objects();
+	void adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit, std::string file_name);
 
 	// Segmentation
 	void cpc_segmentation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr& input_cloud, bool visualize = false);
@@ -66,6 +74,7 @@ public:
 	// Mash
 	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
+	void create_mesh_MC(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 	void create_mesh_objects();
 
 private:
@@ -77,13 +86,9 @@ private:
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large);
 	void separate_segmented_clouds(bool visualize = false);
 	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds, std::string file_name);
-	void adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit, std::string file_name);
-	int find_max_object_index();
 
 public:
 	std::string resource_path_ = "C:/Users/admin/Documents/Visual Studio 2022/Projects/Point_cloud_DP/Resources";
-
-private:
 	std::vector<std::array<int, 3>> segment_colors_ = { {255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}, {255, 0, 255}, {0, 255, 255}, {128, 0, 0}, {0, 128, 0}, {0, 0, 128}, {0, 128, 128}, {128, 128, 0}, {128, 0, 128}, {0, 128, 128}, {128, 128, 128}, {255, 165, 0}, {128, 0, 0}, {128, 128, 0}, {0, 128, 0}, {128, 128, 128}, {165, 42, 42}, {255, 192, 203}, {255, 20, 147}, {0, 255, 127}, {139, 0, 139}, {255, 255, 255}, {0, 255, 255}, {255, 140, 0}, {255, 255, 0}, {106, 90, 205}, {255, 69, 0}, {0, 250, 154} };
 
 };

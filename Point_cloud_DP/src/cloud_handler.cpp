@@ -311,7 +311,7 @@ void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cl
 	tree->setInputCloud(input_cloud);
 	n.setInputCloud(input_cloud);
 	n.setSearchMethod(tree);
-	n.setRadiusSearch(0.8);
+	n.setRadiusSearch(0.5);
 	n.compute(*normals);
 
 	// Concatenate the XYZ and normal fields*
@@ -327,12 +327,12 @@ void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cl
 	pcl::PolygonMesh triangles;
 
 	// Set the maximum distance between connected points (maximum edge length)
-	gp3.setSearchRadius(1.20);
+	gp3.setSearchRadius(0.35);
 
 	// Set typical values for the parameters
-	gp3.setMu(2.5);
-	gp3.setMaximumNearestNeighbors(600);
-	gp3.setMaximumSurfaceAngle(M_PI / 2); // 45 degrees
+	gp3.setMu(2.8);
+	gp3.setMaximumNearestNeighbors(1000);
+	gp3.setMaximumSurfaceAngle(M_PI / 4); // 45 degrees
 	gp3.setMinimumAngle(M_PI / 18); // 10 degrees
 	gp3.setMaximumAngle(2 * M_PI / 3); // 120 degrees
 	gp3.setNormalConsistency(false);
@@ -344,7 +344,45 @@ void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cl
 	gp3.reconstruct(triangles);
 
 	PCL_INFO("Saving mesh... \n");
-	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name + ".vtk", triangles);
+	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, triangles);
+	PCL_INFO("Mesh saved \n");
+}
+
+void CloudHandler::create_mesh_MC(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name)
+{	
+	// Normal estimation*
+	PCL_INFO("Calculating normal estimation... \n");
+	pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> n;
+	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(input_cloud);
+	n.setInputCloud(input_cloud);
+	n.setSearchMethod(tree);
+	n.setRadiusSearch(0.5);
+	n.setNumberOfThreads(8);
+	n.compute(*normals);
+		
+	// Concatenate the XYZ and normal fields*
+	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
+	pcl::concatenateFields(*input_cloud, *normals, *cloud_with_normals);
+
+	// Create search tree*
+	pcl::search::KdTree<pcl::PointNormal>::Ptr tree2(new pcl::search::KdTree<pcl::PointNormal>);
+	tree2->setInputCloud(cloud_with_normals);
+
+	PCL_INFO("Calculating mesh... \n");
+	pcl::MarchingCubesHoppe<pcl::PointNormal> mc;
+	pcl::PolygonMesh polygons;
+	mc.setInputCloud(cloud_with_normals);
+	mc.setSearchMethod(tree2);
+	mc.setGridResolution(120, 120, 120);
+	mc.setIsoLevel(0.02);
+	mc.setDistanceIgnore(0.01);
+	mc.setPercentageExtendGrid(0.00);
+	mc.reconstruct(polygons);
+
+	PCL_INFO("Saving mesh... \n");
+	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, polygons);
 	PCL_INFO("Mesh saved \n");
 }
 
@@ -352,18 +390,23 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 {
 	// Normal estimation*
 	PCL_INFO("Calculating normal estimation... \n");
-	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
+	pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> n;
 	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 	tree->setInputCloud(input_cloud);
+	n.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 	n.setInputCloud(input_cloud);
+	n.setSearchSurface(input_cloud);
 	n.setSearchMethod(tree);
 	n.setRadiusSearch(0.5);
+	n.setNumberOfThreads(8);
 	n.compute(*normals);
 
 	// Concatenate the XYZ and normal fields*
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::concatenateFields(*input_cloud, *normals, *cloud_with_normals);
+
+	save_cloud<pcl::PointNormal>(cloud_with_normals, "/Testing/object_64_normals.pcd");
 
 	pcl::Poisson<pcl::PointNormal> poisson;
 	poisson.setInputCloud(cloud_with_normals); // Set your input point cloud
@@ -438,8 +481,21 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 		mesh.polygons = new_polygons;
 	}
 
+	pcl::PolygonMesh smoothedMesh;
+	pcl::PolygonMesh::Ptr meshPtr(new pcl::PolygonMesh);
+	*meshPtr = mesh;
+
+	// Apply MeshSmoothingLaplacianVTK for mesh smoothing
+	pcl::MeshSmoothingLaplacianVTK vtk;
+	vtk.setInputMesh(meshPtr);
+	vtk.setBoundarySmoothing(true);
+	vtk.setEdgeAngle(120);
+	vtk.setRelaxationFactor(0.02);
+	vtk.setNumIter(100);
+	vtk.process(smoothedMesh);
+
 	PCL_INFO("\nSaving mesh... \n");
-	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, mesh);
+	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, smoothedMesh);
 	PCL_INFO("Mesh saved \n");
 }
 
@@ -715,6 +771,19 @@ void CloudHandler::show_mesh(pcl::PolygonMesh::Ptr& input_mesh)
 {	
 	pcl::visualization::PCLVisualizer viewer("Mesh Viewer");
 	viewer.addPolygonMesh(*input_mesh, "mesh");
+
+	PCL_INFO("Mesh visualized \n");
+	while (!viewer.wasStopped())
+	{
+		viewer.spinOnce();
+	}
+}
+
+void CloudHandler::show_mesh_cloud(pcl::PolygonMesh::Ptr& input_mesh, pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud)
+{
+	pcl::visualization::PCLVisualizer viewer("Mesh Viewer");
+	viewer.addPolygonMesh(*input_mesh, "mesh");
+	viewer.addPointCloud(input_cloud, "cloud");
 
 	PCL_INFO("Mesh visualized \n");
 	while (!viewer.wasStopped())
