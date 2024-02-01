@@ -88,6 +88,22 @@ void visualize_mesh_cloud(std::string file_name)
 	cloud_handler.show_mesh_cloud(mesh,cloud);
 }
 
+void visualize_normals(std::string file_name)
+{
+	CloudHandler cloud_handler;
+	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
+	std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr> normals;
+	pcl::PointCloud<pcl::PointNormal>::Ptr normal(new pcl::PointCloud<pcl::PointNormal>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(cloud, "Testing/" + file_name + ".ply");
+	cloud_handler.load_cloud<pcl::PointNormal>(normal, "Testing/" + file_name + "_normals.pcd");
+	clouds.push_back(cloud);
+	normals.push_back(normal);
+
+	cloud_handler.show_clouds(clouds, normals);
+}
+
 void visualize_mesh(std::string file_name)
 {
 	CloudHandler cloud_handler;
@@ -132,6 +148,41 @@ void findObjectTest(std::string file_name)
 	clouds.push_back(ground);
 	clouds.push_back(object);
 	cloud_handler.show_clouds(clouds, normals);
+}
+
+void findObjectPassTrough()
+{
+	CloudHandler cloud_handler;
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered1(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered2(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered3(new pcl::PointCloud<pcl::PointXYZRGB>);
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers, "Street_cloud/street_cloud_inliers.ply");
+
+	// Create the pass filtering object
+	pcl::PassThrough<pcl::PointXYZRGB> pass;
+	pass.setInputCloud(inliers);
+	pass.setFilterFieldName("z");
+	pass.setFilterLimits(180, 190);
+
+	pcl::copyPointCloud(*inliers, *filtered1);
+	pass.setNegative(false);
+	pass.filter(*filtered1);
+
+	pcl::copyPointCloud(*filtered1, *filtered2);
+	pass.setInputCloud(filtered1);
+	pass.setFilterFieldName("x");
+	pass.setFilterLimits(-10, -5);
+	pass.filter(*filtered2);
+
+	pcl::copyPointCloud(*filtered2, *filtered3);
+	pass.setInputCloud(filtered2);
+	pass.setFilterFieldName("y");
+	pass.setFilterLimits(-97, -96);
+	pass.filter(*filtered3);
+
+	cloud_handler.save_cloud<pcl::PointXYZRGB>(filtered3, "Testing/lamp.ply");
+	cloud_handler.show_cloud(filtered3);
 }
 
 void createMeshTest(std::string file_name)
@@ -188,34 +239,22 @@ void calculate_all()
 	//visualize_mesh("Street_cloud/street_cloud_mesh");
 	//visualize_downsampled_cloud();
 
-
-
 	//// TESTING
 	//poissonTest();
 	//visualize_mesh("car_test");
 	//visualize_mesh("Presenation/mesh_Poisson1");
 	//findObjectTest("object_64");
 
-	std::string name = "object_64";
+	std::string name = "lamp";
 	/*downsampleCloudTest(name);
 	createMeshTest(name + "_downsampled");
 	visualize_mesh_cloud("Testing/" + name + "_downsampled");*/
-
-	createMeshTest(name);
+	/*createMeshTest(name);
 	visualize_mesh_cloud("Testing/" + name);
+	visualize_normals(name);*/
 
-	CloudHandler cloud_handler2;
-	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
-	std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr> normals;
-	pcl::PointCloud<pcl::PointNormal>::Ptr normal(new pcl::PointCloud<pcl::PointNormal>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-
-	cloud_handler2.load_cloud<pcl::PointXYZRGB>(cloud, "Testing/" + name + ".ply");
-	cloud_handler2.load_cloud<pcl::PointNormal>(normal, "Testing/" + name + "_normals.pcd");
-	clouds.push_back(cloud);
-	normals.push_back(normal);
-
-	cloud_handler2.show_clouds(clouds, normals);
+	visualize_cloud("Street_cloud/street_cloud_inliers.ply");
+	//findObjectPassTrough();
 }
 
 int main(int argc, char** argv)

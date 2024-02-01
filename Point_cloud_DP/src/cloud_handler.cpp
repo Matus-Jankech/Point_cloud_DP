@@ -392,13 +392,18 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	PCL_INFO("Calculating normal estimation... \n");
 	pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> n;
 	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 	tree->setInputCloud(input_cloud);
-	n.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+
+	Eigen::Vector4f centroid;
+	pcl::compute3DCentroid(*input_cloud, centroid);
+
+	n.setViewPoint(centroid[0], centroid[1], centroid[2]);
 	n.setInputCloud(input_cloud);
 	n.setSearchSurface(input_cloud);
 	n.setSearchMethod(tree);
-	n.setRadiusSearch(0.5);
+	n.setRadiusSearch(0.15);
 	n.setNumberOfThreads(8);
 	n.compute(*normals);
 
@@ -406,13 +411,14 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::concatenateFields(*input_cloud, *normals, *cloud_with_normals);
 
-	save_cloud<pcl::PointNormal>(cloud_with_normals, "/Testing/object_64_normals.pcd");
+	save_cloud<pcl::PointNormal>(cloud_with_normals, "/Testing/lamp_normals.pcd");
 
 	pcl::Poisson<pcl::PointNormal> poisson;
 	poisson.setInputCloud(cloud_with_normals); // Set your input point cloud
 	poisson.setDepth(9); // Set the depth level of the Octree
 	poisson.setSolverDivide(50);
 	poisson.setIsoDivide(50);
+	poisson.setPointWeight(50);
 	poisson.setThreads(8);
 
 	// Perform Poisson surface reconstruction
@@ -421,7 +427,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	poisson.reconstruct(mesh);
 
 	// Define your threshold distance
-	const double distanceThreshold = 0.01; 
+	const double distanceThreshold = 0.001; 
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr meshPointCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::fromPCLPointCloud2(mesh.cloud, *meshPointCloud);
