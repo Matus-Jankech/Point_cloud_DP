@@ -8,11 +8,28 @@ void visualize_inliers_outliers()
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr outliers_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers_cloud, "street_cloud_inliers.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(outliers_cloud, "street_cloud_outliers.ply");
-	cloud_handler.set_cloud_color(outliers_cloud, 0, 255, 0);
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers_cloud, "Street_cloud/street_cloud_inliers.ply");
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(outliers_cloud, "Street_cloud/street_cloud_outliers.ply");
+	cloud_handler.set_cloud_color(outliers_cloud, 255, 255, 255);
 	clouds.push_back(inliers_cloud);
 	clouds.push_back(outliers_cloud);
+
+	cloud_handler.show_clouds(clouds);
+}
+
+void visualize_ground_objects()
+{
+	CloudHandler cloud_handler;
+	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
+	std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr> normals;
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr objects_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(ground_cloud, "Street_cloud/street_cloud_ground.ply");
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(objects_cloud, "Street_cloud/street_cloud_objects.ply");
+	cloud_handler.set_cloud_color(ground_cloud, 255, 255, 255);
+	clouds.push_back(ground_cloud);
+	clouds.push_back(objects_cloud);
 
 	cloud_handler.show_clouds(clouds);
 }
@@ -20,33 +37,29 @@ void visualize_inliers_outliers()
 void visualize_classified_cloud()
 {	
 	CloudHandler cloud_handler;
+	cloud_handler.set_base_path("Street_cloud");
+
 	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
 	std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr> normals;
-	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds_to_downsample;
-	pcl::PointCloud<pcl::PointNormal>::Ptr don_cloud(new pcl::PointCloud<pcl::PointNormal>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class0(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class1(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class2(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class3(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr class4(new pcl::PointCloud<pcl::PointXYZRGB>);
 
-	//cloud_handler.load_cloud<pcl::PointNormal>(don_cloud, "don.pcd");
-	//normals.push_back(don_cloud);
+	int max_object_index = cloud_handler.find_max_object_index();
+	max_object_index = max_object_index + 1;
+	std::vector<std::array<int, 3>> colors = { {255, 0, 0}, {0, 255, 0}, {0, 0, 255} };
 
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class0, "street_classified_0.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class1, "street_classified_1.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class2, "street_classified_2.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class3, "street_classified_3.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(class4, "street_classified_4.ply");
-	cloud_handler.set_cloud_color(class1, 0, 0, 255);
-	cloud_handler.set_cloud_color(class2, 0, 255, 0);
-	cloud_handler.set_cloud_color(class3, 0, 255, 255);
-	cloud_handler.set_cloud_color(class4, 255, 255, 0);
-	clouds.push_back(class0);
-	clouds.push_back(class1);
-	clouds.push_back(class2);
-	clouds.push_back(class3);
-	clouds.push_back(class4);
+	for (int i = 0; i < max_object_index; i++)
+	{
+		for (int j = 0; j < 3; j++)
+		{
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr object(new pcl::PointCloud<pcl::PointXYZRGB>);
+			std::string file_name = "Objects/object_" + std::to_string(i) + "_c" + std::to_string(j) + ".ply";
+			std::array<int, 3> color = colors[j % colors.size()];
+
+			if (cloud_handler.load_cloud<pcl::PointXYZRGB>(object, file_name)) {
+				cloud_handler.set_cloud_color(object, color[0], color[1], color[2]);
+				clouds.push_back(object);
+			}
+		}
+	}
 
 	cloud_handler.show_clouds(clouds, normals);
 }
@@ -234,6 +247,7 @@ void calculate_all()
 	//cloud_handler.cpc_segmentation(objects, true);
 	//cloud_handler.downsample_objects();
 	//cloud_handler.create_mesh_objects();
+	//cloud_handler.combine_mesh_ground_objects();
 
 	//// VISUALIZE RESULTS
 	//visualize_mesh("Street_cloud/street_cloud_mesh");
@@ -245,7 +259,7 @@ void calculate_all()
 	//visualize_mesh("Presenation/mesh_Poisson1");
 	//findObjectTest("object_64");
 
-	std::string name = "lamp";
+	//std::string name = "lamp";
 	/*downsampleCloudTest(name);
 	createMeshTest(name + "_downsampled");
 	visualize_mesh_cloud("Testing/" + name + "_downsampled");*/
@@ -253,8 +267,31 @@ void calculate_all()
 	visualize_mesh_cloud("Testing/" + name);
 	visualize_normals(name);*/
 
-	visualize_cloud("Street_cloud/street_cloud_inliers.ply");
+	//visualize_cloud("Street_cloud/street_cloud_inliers.ply");
 	//findObjectPassTrough();
+
+
+	//// PRESENTATION
+	//visualize_cloud("Street_cloud/street_cloud.ply");
+	//visualize_mesh("Street_cloud/street_cloud_mesh");
+	//visualize_inliers_outliers();
+	//visualize_ground_objects();
+	//visualize_cloud("Street_cloud/street_cloud_objects.ply");
+	//visualize_cloud("Street_cloud/street_cloud_ground.ply");
+	//visualize_cloud("Street_cloud/street_cloud_ground_downsampled.ply");
+	//visualize_classified_cloud();
+	//visualize_downsampled_cloud();
+
+	/*visualize_cloud("Testing/object_64.ply");
+	std::string name = "object_64";
+	downsampleCloudTest(name);
+	createMeshTest(name + "_downsampled");
+	visualize_mesh_cloud("Testing/" + name + "_downsampled");
+	createMeshTest(name);
+	visualize_mesh_cloud("Testing/" + name);
+	visualize_normals(name);*/
+
+	//visualize_mesh("Street_cloud/street_cloud_mesh");
 }
 
 int main(int argc, char** argv)
