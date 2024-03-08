@@ -42,7 +42,8 @@ void CloudHandler::filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& 
 	pcl::PassThrough<pcl::PointXYZRGB> pass;
 	pass.setInputCloud(input_cloud);
 	pass.setFilterFieldName("z");
-	pass.setFilterLimits(179, 182);
+	pass.setFilterLimits(179, 182); // dataset 1
+	//pass.setFilterLimits(-5, 5); // dataset 2
 
 	pcl::copyPointCloud(*input_cloud, *filtered_data);
 	pass.setNegative(false);
@@ -127,7 +128,7 @@ double calculateAverageDistance(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud) {
 
 void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds, std::string file_name)
 {	
-	std::vector<double> voxel_sizes = { 0.12, 0.05, 0.0 };
+	std::vector<double> voxel_sizes = { 0.13, 0.06, 0.03, 0.0 };
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_all(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::VoxelGrid<pcl::PointXYZRGB> sor;
@@ -231,14 +232,14 @@ void CloudHandler::downsample_objects()
 
 		std::cout << "\n";
 		load_cloud<pcl::PointXYZRGB>(object, in_name);
-		adaptive_downsampling(object, 0.03, 0.30, out_name);
+		adaptive_downsampling(object, 0.08, 0.40, out_name);
 	}
 }
 
 void CloudHandler::adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit, std::string file_name)
 {	
-	std::vector<double> lower_threshold = { 0.0, 0.15, 0.3};
-	std::vector<double> upper_threshold = { 0.15, 0.3, 1};
+	std::vector<double> lower_threshold = { 0.0, 0.06, 0.12, 0.18};
+	std::vector<double> upper_threshold = { 0.06, 0.12, 0.18, 1};
 
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_small(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_large(new pcl::PointCloud<pcl::PointNormal>);
@@ -395,7 +396,9 @@ void CloudHandler::create_mesh_MC(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_clo
 	PCL_INFO("Mesh saved \n");
 }
 
-void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name)
+void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud,
+									  pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud_full, 
+									  std::string file_name, int depth)
 {
 	// Normal estimation*
 	PCL_INFO("Calculating normal estimation... \n");
@@ -408,9 +411,10 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	Eigen::Vector4f centroid;
 	pcl::compute3DCentroid(*input_cloud, centroid);
 
-	n.setViewPoint(centroid[0], centroid[1], centroid[2]);
+	if (input_cloud->size() < 40000) n.setViewPoint(centroid[0], centroid[1], centroid[2]);
+	else n.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 	n.setInputCloud(input_cloud);
-	n.setSearchSurface(input_cloud);
+	n.setSearchSurface(input_cloud_full);
 	n.setSearchMethod(tree);
 	n.setRadiusSearch(0.25);
 	n.setNumberOfThreads(8);
@@ -420,11 +424,11 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::concatenateFields(*input_cloud, *normals, *cloud_with_normals);
 
-	save_cloud<pcl::PointNormal>(cloud_with_normals, "/Testing/object_64_normals.pcd");
+	//save_cloud<pcl::PointNormal>(cloud_with_normals, "/Testing/object_64_normals.pcd");
 
 	pcl::Poisson<pcl::PointNormal> poisson;
 	poisson.setInputCloud(cloud_with_normals); // Set your input point cloud
-	poisson.setDepth(9); // Set the depth level of the Octree
+	poisson.setDepth(depth); // Set the depth level of the Octree
 	poisson.setSolverDivide(50);
 	poisson.setIsoDivide(50);
 	poisson.setPointWeight(50);
@@ -436,8 +440,11 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	poisson.reconstruct(mesh);
 
 	// Define your threshold distance
-	const double distanceThreshold = 0.01; 
-
+	double distanceThreshold = 0;
+	if (input_cloud->size() <= 1000) distanceThreshold = 0.007;
+	if (input_cloud->size() > 1000) distanceThreshold = 0.013;
+	if (input_cloud->size() > 40000) distanceThreshold = 0.08;
+	
 	pcl::PointCloud<pcl::PointXYZ>::Ptr meshPointCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::fromPCLPointCloud2(mesh.cloud, *meshPointCloud);
 
@@ -496,21 +503,24 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 		mesh.polygons = new_polygons;
 	}
 
-	pcl::PolygonMesh smoothedMesh;
-	pcl::PolygonMesh::Ptr meshPtr(new pcl::PolygonMesh);
-	*meshPtr = mesh;
+	pcl::PolygonMesh::Ptr simplified_mesh(new pcl::PolygonMesh);
+	pcl::surface::SimplificationRemoveUnusedVertices sruv;
+	sruv.simplify(mesh, *simplified_mesh);
 
-	// Apply MeshSmoothingLaplacianVTK for mesh smoothing
+	//// Apply MeshSmoothingLaplacianVTK for mesh smoothing
+	pcl::PolygonMesh smoothed_mesh;
 	pcl::MeshSmoothingLaplacianVTK vtk;
-	vtk.setInputMesh(meshPtr);
+	vtk.setInputMesh(simplified_mesh);
 	vtk.setBoundarySmoothing(true);
-	vtk.setEdgeAngle(120);
-	vtk.setRelaxationFactor(0.02);
+	vtk.setFeatureEdgeSmoothing(true);
+	vtk.setFeatureAngle(10);
+	vtk.setEdgeAngle(150);
+	vtk.setRelaxationFactor(0.03);
 	vtk.setNumIter(100);
-	vtk.process(smoothedMesh);
+	vtk.process(smoothed_mesh);
 
 	PCL_INFO("\nSaving mesh... \n");
-	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, mesh);
+	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, smoothed_mesh);
 	PCL_INFO("Mesh saved \n");
 }
 
@@ -520,14 +530,17 @@ void CloudHandler::create_mesh_objects()
 	max_object_index = max_object_index + 1;
 
 	for (int i = 0; i < max_object_index; i++)
-	{
+	{	
+		pcl::PointCloud<pcl::PointXYZ>::Ptr object_full(new pcl::PointCloud<pcl::PointXYZ>);
 		pcl::PointCloud<pcl::PointXYZ>::Ptr object(new pcl::PointCloud<pcl::PointXYZ>);
+		std::string in_name_full = "Objects/object_" + std::to_string(i) + ".ply";
 		std::string in_name = "Objects/object_" + std::to_string(i) + "_downsampled.ply";
 		std::string out_name = "Objects/object_" + std::to_string(i) + "_mesh.vtk";
 
 		std::cout << "\n";
+		load_cloud<pcl::PointXYZ>(object_full, in_name_full);
 		load_cloud<pcl::PointXYZ>(object, in_name);
-		create_mesh_Poison(object, out_name);
+		create_mesh_Poison(object, object_full, out_name, 9);
 	}
 
 	std::vector<pcl::PolygonMesh::Ptr> meshes;

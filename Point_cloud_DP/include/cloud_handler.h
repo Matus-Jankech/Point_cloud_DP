@@ -39,6 +39,16 @@
 #include <pcl/surface/marching_cubes_rbf.h>
 #include <pcl/surface/mls.h>
 #include <pcl/surface/vtk_smoothing/vtk_mesh_smoothing_laplacian.h>
+#include <pcl/surface/vtk_smoothing/vtk_utils.h>
+#include <pcl/surface/simplification_remove_unused_vertices.h>
+
+#include <pcl/surface/texture_mapping.h>
+#include <boost/filesystem.hpp>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <pcl/io/obj_io.h>
+#include <pcl/common/transforms.h>
 
 class CloudHandler
 {
@@ -73,7 +83,9 @@ public:
 
 	// Mash
 	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
-	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
+	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, 
+							pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud_full,
+							std::string file_name, int depth);
 	void create_mesh_MC(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 	void create_mesh_objects();
 	void combine_mesh_ground_objects();
