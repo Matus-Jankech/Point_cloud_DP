@@ -70,6 +70,8 @@ public:
 	inline void set_base_path(std::string base) { resource_path_ = resource_path_ + "/" + base; }
 	int find_max_object_index();
 	void show_mesh_cloud(pcl::PolygonMesh::Ptr& input_mesh, pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud);
+	bool load_textured_mesh(pcl::TextureMesh::Ptr& input_mesh, std::string file_name);
+	void show_textured_mesh(pcl::TextureMesh::Ptr& input_mesh);
 
 	// Filtering
 	void filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK = 50, double std_dev = 4);
@@ -81,7 +83,7 @@ public:
 	// Segmentation
 	void cpc_segmentation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr& input_cloud, bool visualize = false);
 
-	// Mash
+	// Mesh
 	void create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 	void create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, 
 							pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud_full,
@@ -89,6 +91,9 @@ public:
 	void create_mesh_MC(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 	void create_mesh_objects();
 	void combine_mesh_ground_objects();
+
+	// Texturing
+	void texturize_mesh(pcl::PolygonMesh::Ptr& input_mesh);
 
 private:
 	void calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
@@ -99,6 +104,15 @@ private:
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large);
 	void separate_segmented_clouds(bool visualize = false);
 	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds, std::string file_name);
+	int saveOBJFile(const std::string& file_name, const pcl::TextureMesh& tex_mesh, unsigned precision);
+	std::ifstream& GotoLine(std::ifstream& file, unsigned int num);
+	bool readCamPoseFile(std::string filename, pcl::TextureMapping<pcl::PointXYZ>::Camera& cam);
+	void showCameras(pcl::texture_mapping::CameraVector cams, pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud);
+	bool isFaceProjected(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3, pcl::PointXY& proj1, pcl::PointXY& proj2, pcl::PointXY& proj3);
+	bool getPointUVCoordinates(const pcl::PointXYZ& pt, pcl::PointXY& UV_coordinates);
+	void getTriangleCircumcscribedCircleCentroid(const pcl::PointXY& p1, const pcl::PointXY& p2, const pcl::PointXY& p3, pcl::PointXY& circumcenter, double& radius);
+	bool checkPointInsideTriangle(const pcl::PointXY& p1, const pcl::PointXY& p2, const pcl::PointXY& p3, const pcl::PointXY& pt);
+	void map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::texture_mapping::CameraVector& cameras);
 
 public:
 	std::string resource_path_ = "C:/Users/admin/Documents/Visual Studio 2022/Projects/Point_cloud_DP/Resources";

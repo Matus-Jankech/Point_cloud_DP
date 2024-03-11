@@ -126,6 +126,15 @@ void visualize_mesh(std::string file_name)
 	cloud_handler.show_mesh(mesh);
 }
 
+void visualize_textured_mesh(std::string file_name)
+{
+	CloudHandler cloud_handler;
+	pcl::TextureMesh::Ptr mesh(new pcl::TextureMesh);
+
+	cloud_handler.load_textured_mesh(mesh, file_name + ".obj");
+	cloud_handler.show_textured_mesh(mesh);
+}
+
 void visualize_cloud(std::string file_name)
 {
 	CloudHandler cloud_handler;
@@ -237,7 +246,7 @@ void visualize_classified_cloud_test(std::string file_name)
 void calculate_all()
 {
 	CloudHandler cloud_handler;
-	std::string base_path = "Street_cloud";
+	std::string base_path = "Roundabout_cloud";
 	cloud_handler.set_base_path(base_path);
 
 	//// INLIERS + OUTLIERS
@@ -269,6 +278,12 @@ void calculate_all()
 	//cloud_handler.downsample_objects();
 	//cloud_handler.create_mesh_objects();
 	//cloud_handler.combine_mesh_ground_objects();
+
+	// TEXTURIZE MESH
+	pcl::PolygonMesh::Ptr mesh_all(new pcl::PolygonMesh);
+	cloud_handler.load_mesh(mesh_all, "street_cloud_mesh.vtk");
+	cloud_handler.texturize_mesh(mesh_all);
+	//visualize_textured_mesh(base_path + "/Textures/textured_mesh");
 
 	//// VISUALIZE RESULTS
 	//visualize_mesh(base_path + "/street_cloud_mesh");

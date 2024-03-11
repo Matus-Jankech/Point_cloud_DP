@@ -743,6 +743,364 @@ void CloudHandler::separate_segmented_clouds(bool visualize)
 	return;
 }
 
+void CloudHandler::texturize_mesh(pcl::PolygonMesh::Ptr& input_mesh)
+{
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::fromPCLPointCloud2(input_mesh->cloud, *cloud);
+
+	// Create the texturemesh object that will contain our UV-mapped mesh
+	pcl::TextureMesh mesh;
+	mesh.cloud = input_mesh->cloud;
+	std::vector< pcl::Vertices> polygon_1;
+
+	// push faces into the texturemesh object
+	polygon_1.resize(input_mesh->polygons.size());
+	for (size_t i = 0; i < input_mesh->polygons.size(); ++i)
+	{
+		polygon_1[i] = input_mesh->polygons[i];
+	}
+	mesh.tex_polygons.push_back(polygon_1);
+	PCL_INFO("\tInput mesh contains %d faces and %d vertices\n", mesh.tex_polygons[0].size(), cloud->points.size());
+	PCL_INFO("...Done.\n");
+
+	// Load textures and cameras poses and intrinsics
+	PCL_INFO("\nLoading textures and camera poses...\n");
+	pcl::texture_mapping::CameraVector my_cams;
+
+	const boost::filesystem::path base_dir("C:/Users/admin/Documents/Visual Studio 2022/Projects/Point_cloud_DP/Resources/Roundabout_cloud/Textures");
+	std::string extension(".txt");
+	int cpt_cam = 0;
+	for (boost::filesystem::directory_iterator it(base_dir); it != boost::filesystem::directory_iterator(); ++it)
+	{
+		if (boost::filesystem::is_regular_file(it->status()) && boost::filesystem::extension(it->path()) == extension)
+		{
+			pcl::TextureMapping<pcl::PointXYZ>::Camera cam;
+			readCamPoseFile(it->path().string(), cam);
+			cam.texture_file = boost::filesystem::basename(it->path()) + ".jpg";
+			my_cams.push_back(cam);
+			cpt_cam++;
+		}
+	}
+	PCL_INFO("\tLoaded %d textures.\n", my_cams.size());
+	PCL_INFO("...Done.\n");
+
+	// Display cameras to user
+	PCL_INFO("\nDisplaying cameras. Press \'q\' to continue texture mapping\n");
+	showCameras(my_cams, cloud);
+
+	// Create materials for each texture (and one extra for occluded faces)
+	mesh.tex_materials.resize(my_cams.size() + 1);
+	for (int i = 0; i <= my_cams.size(); ++i)
+	{
+		pcl::TexMaterial mesh_material;
+		mesh_material.tex_Ka.r = 0.2f;
+		mesh_material.tex_Ka.g = 0.2f;
+		mesh_material.tex_Ka.b = 0.2f;
+
+		mesh_material.tex_Kd.r = 0.8f;
+		mesh_material.tex_Kd.g = 0.8f;
+		mesh_material.tex_Kd.b = 0.8f;
+
+		mesh_material.tex_Ks.r = 1.0f;
+		mesh_material.tex_Ks.g = 1.0f;
+		mesh_material.tex_Ks.b = 1.0f;
+
+		mesh_material.tex_d = 1.0f;
+		mesh_material.tex_Ns = 75.0f;
+		mesh_material.tex_illum = 2;
+
+		std::stringstream tex_name;
+		tex_name << "material_" << i;
+		tex_name >> mesh_material.tex_name;
+
+		if (i < my_cams.size())
+			mesh_material.tex_file = my_cams[i].texture_file;
+		else
+			mesh_material.tex_file = "occluded.jpg";
+
+		mesh.tex_materials[i] = mesh_material;
+	}
+
+	// Sort faces
+	PCL_INFO("\nSorting faces by cameras...\n");
+	//pcl::TextureMapping<pcl::PointXYZ> tm; // TextureMapping object that will perform the sort
+	//tm.textureMeshwithMultipleCameras(mesh, my_cams);
+	map_textures_on_mesh(mesh, my_cams);
+
+	//std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> > dummy_container;
+	//mesh.tex_coordinates.push_back(dummy_container);
+	//mesh.tex_coordinates[0].resize(3 * mesh.tex_polygons[0].size());
+
+	//for (int cpt_visible_faces = 0; cpt_visible_faces < mesh.tex_polygons[0].size(); cpt_visible_faces++)
+	//{
+	//	mesh.tex_coordinates[0][cpt_visible_faces * 3](0) = 0;
+	//	mesh.tex_coordinates[0][cpt_visible_faces * 3](1) = 0;
+
+	//	mesh.tex_coordinates[0][cpt_visible_faces * 3 + 1](0) = 0;
+	//	mesh.tex_coordinates[0][cpt_visible_faces * 3 + 1](1) = 1;
+
+	//	mesh.tex_coordinates[0][cpt_visible_faces * 3 + 2](0) = 1;
+	//	mesh.tex_coordinates[0][cpt_visible_faces * 3 + 2](1) = 1;
+	//}
+
+	//mesh.tex_coord_indices = mesh.tex_polygons;
+
+	PCL_INFO("Sorting faces by cameras done.\n");
+	for (int i = 0; i <= my_cams.size(); ++i)
+	{
+		PCL_INFO("\tSub mesh %d contains %d faces and %d UV coordinates.\n", i, mesh.tex_polygons[i].size(), mesh.tex_coordinates[i].size());
+	}
+
+	// compute normals for the mesh
+	PCL_INFO("\nEstimating normals...\n");
+	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
+	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(cloud);
+	n.setInputCloud(cloud);
+	n.setSearchMethod(tree);
+	n.setKSearch(20);
+	n.compute(*normals);
+
+	// Concatenate XYZ and normal fields
+	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
+	pcl::concatenateFields(*cloud, *normals, *cloud_with_normals);
+	PCL_INFO("...Done.\n");
+
+	pcl::toPCLPointCloud2(*cloud_with_normals, mesh.cloud);
+
+	PCL_INFO("\nSaving mesh to textured_mesh.obj\n");
+
+	saveOBJFile(resource_path_ + "/Textures/textured_mesh.obj", mesh, 5);
+}
+
+void CloudHandler::map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::texture_mapping::CameraVector& cameras)
+{
+	pcl::PointCloud<pcl::PointXYZ>::Ptr mesh_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::fromPCLPointCloud2(mesh.cloud, *mesh_cloud);
+
+	for (int current_cam = 0; current_cam < static_cast<int> (cameras.size()); ++current_cam)
+	{
+		// transform mesh into camera's frame
+		pcl::PointCloud<pcl::PointXYZ>::Ptr camera_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+		pcl::transformPointCloud(*mesh_cloud, *camera_cloud, cameras[current_cam].pose.inverse());
+
+		pcl::visualization::PCLVisualizer visu("cameras");
+		visu.addCoordinateSystem(10.0);
+		pcl::visualization::PointCloudColorHandlerGenericField<pcl::PointXYZ> color_handler(camera_cloud, "z");
+		visu.addPointCloud(camera_cloud, color_handler, "cloud");
+		visu.resetCamera();
+		visu.spin();
+
+		// CREATE UV MAP FOR CURRENT FACES
+		pcl::PointCloud<pcl::PointXY>::Ptr projections(new pcl::PointCloud<pcl::PointXY>);
+		std::vector<bool> visibility;
+		visibility.resize(mesh.tex_polygons[current_cam].size());
+		std::vector<pcl::texture_mapping::UvIndex> indexes_uv_to_points;
+		// for each current face
+
+		//TODO change this
+		pcl::PointXY nan_point;
+		nan_point.x = std::numeric_limits<float>::quiet_NaN();
+		nan_point.y = std::numeric_limits<float>::quiet_NaN();
+		pcl::texture_mapping::UvIndex u_null;
+		u_null.idx_cloud = -1;
+		u_null.idx_face = -1;
+
+		int cpt_invisible = 0;
+		for (int idx_face = 0; idx_face < static_cast<int> (mesh.tex_polygons[current_cam].size()); ++idx_face)
+		{
+			//project each vertice, if one is out of view, stop
+			pcl::PointXY uv_coord1;
+			pcl::PointXY uv_coord2;
+			pcl::PointXY uv_coord3;
+
+			if (isFaceProjected(
+				(*camera_cloud)[mesh.tex_polygons[current_cam][idx_face].vertices[0]],
+				(*camera_cloud)[mesh.tex_polygons[current_cam][idx_face].vertices[1]],
+				(*camera_cloud)[mesh.tex_polygons[current_cam][idx_face].vertices[2]],
+				uv_coord1,
+				uv_coord2,
+				uv_coord3))
+			{
+				// face is in the camera's FOV
+
+				// add UV coordinates
+				projections->points.push_back(uv_coord1);
+				projections->points.push_back(uv_coord2);
+				projections->points.push_back(uv_coord3);
+
+				// remember corresponding face
+				pcl::texture_mapping::UvIndex u1, u2, u3;
+				u1.idx_cloud = mesh.tex_polygons[current_cam][idx_face].vertices[0];
+				u2.idx_cloud = mesh.tex_polygons[current_cam][idx_face].vertices[1];
+				u3.idx_cloud = mesh.tex_polygons[current_cam][idx_face].vertices[2];
+				u1.idx_face = idx_face; u2.idx_face = idx_face; u3.idx_face = idx_face;
+				indexes_uv_to_points.push_back(u1);
+				indexes_uv_to_points.push_back(u2);
+				indexes_uv_to_points.push_back(u3);
+
+				//keep track of visibility
+				visibility[idx_face] = true;
+			}
+			else
+			{
+				projections->points.push_back(nan_point);
+				projections->points.push_back(nan_point);
+				projections->points.push_back(nan_point);
+				indexes_uv_to_points.push_back(u_null);
+				indexes_uv_to_points.push_back(u_null);
+				indexes_uv_to_points.push_back(u_null);
+				//keep track of visibility
+				visibility[idx_face] = false;
+				cpt_invisible++;
+			}
+		}
+
+		// **************************
+
+		//// TODO handle case were no face could be projected
+		//if (visibility.size() - cpt_invisible != 0)
+		//{
+		//	//create kdtree
+		//	pcl::KdTreeFLANN<pcl::PointXY> kdtree;
+		//	kdtree.setInputCloud(projections);
+
+		//	pcl::Indices idxNeighbors;
+		//	std::vector<float> neighborsSquaredDistance;
+		//	// af first (idx_pcan < current_cam), check if some of the faces attached to previous cameras occlude the current faces
+		//	// then (idx_pcam == current_cam), check for self occlusions. At this stage, we skip faces that were already marked as occluded
+		//	cpt_invisible = 0;
+		//	for (int idx_pcam = 0; idx_pcam <= current_cam; ++idx_pcam)
+		//	{
+		//		// project all faces
+		//		for (int idx_face = 0; idx_face < static_cast<int> (mesh.tex_polygons[idx_pcam].size()); ++idx_face)
+		//		{
+		//			if (idx_pcam == current_cam && !visibility[idx_face])
+		//			{
+		//				// we are now checking for self occlusions within the current faces
+		//				// the current face was already declared as occluded.
+		//				// therefore, it cannot occlude another face anymore => we skip it
+		//				continue;
+		//			}
+
+		//			// project each vertice, if one is out of view, stop
+		//			pcl::PointXY uv_coord1;
+		//			pcl::PointXY uv_coord2;
+		//			pcl::PointXY uv_coord3;
+
+		//			if (isFaceProjected(
+		//				(*camera_cloud)[mesh.tex_polygons[idx_pcam][idx_face].vertices[0]],
+		//				(*camera_cloud)[mesh.tex_polygons[idx_pcam][idx_face].vertices[1]],
+		//				(*camera_cloud)[mesh.tex_polygons[idx_pcam][idx_face].vertices[2]],
+		//				uv_coord1,
+		//				uv_coord2,
+		//				uv_coord3))
+		//			{
+		//				// face is in the camera's FOV
+		//				//get its circumsribed circle
+		//				double radius;
+		//				pcl::PointXY center;
+		//				// getTriangleCircumcenterAndSize (uv_coord1, uv_coord2, uv_coord3, center, radius);
+		//				getTriangleCircumcscribedCircleCentroid(uv_coord1, uv_coord2, uv_coord3, center, radius); // this function yields faster results than getTriangleCircumcenterAndSize
+
+		//				// get points inside circ.circle
+		//				if (kdtree.radiusSearch(center, radius, idxNeighbors, neighborsSquaredDistance) > 0)
+		//				{
+		//					// for each neighbor
+		//					for (const auto& idxNeighbor : idxNeighbors)
+		//					{
+		//						if (std::max((*camera_cloud)[mesh.tex_polygons[idx_pcam][idx_face].vertices[0]].z,
+		//							std::max((*camera_cloud)[mesh.tex_polygons[idx_pcam][idx_face].vertices[1]].z,
+		//								(*camera_cloud)[mesh.tex_polygons[idx_pcam][idx_face].vertices[2]].z))
+		//							< (*camera_cloud)[indexes_uv_to_points[idxNeighbor].idx_cloud].z)
+		//						{
+		//							// neighbor is farther than all the face's points. Check if it falls into the triangle
+		//							if (checkPointInsideTriangle(uv_coord1, uv_coord2, uv_coord3, (*projections)[idxNeighbor]))
+		//							{
+		//								// current neighbor is inside triangle and is closer => the corresponding face
+		//								visibility[indexes_uv_to_points[idxNeighbor].idx_face] = false;
+		//								cpt_invisible++;
+		//								//TODO we could remove the projections of this face from the kd-tree cloud, but I found it slower, and I need the point to keep ordered to query UV coordinates later
+		//							}
+		//						}
+		//					}
+		//				}
+		//			}
+		//		}
+		//	}
+		//}
+
+		// **************************
+
+		if (static_cast<int> (mesh.tex_coordinates.size()) <= current_cam)
+		{
+			std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> > dummy_container;
+			mesh.tex_coordinates.push_back(dummy_container);
+		}
+		mesh.tex_coordinates[current_cam].resize(3 * visibility.size());
+
+		std::vector<pcl::Vertices> occluded_faces;
+		occluded_faces.resize(visibility.size());
+		std::vector<pcl::Vertices> visible_faces;
+		visible_faces.resize(visibility.size());
+
+		int cpt_occluded_faces = 0;
+		int cpt_visible_faces = 0;
+
+		for (std::size_t idx_face = 0; idx_face < visibility.size(); ++idx_face)
+		{
+			if (visibility[idx_face])
+			{
+				// face is visible by the current camera copy UV coordinates
+				mesh.tex_coordinates[current_cam][cpt_visible_faces * 3](0) = (*projections)[idx_face * 3].x;
+				mesh.tex_coordinates[current_cam][cpt_visible_faces * 3](1) = (*projections)[idx_face * 3].y;
+
+				mesh.tex_coordinates[current_cam][cpt_visible_faces * 3 + 1](0) = (*projections)[idx_face * 3 + 1].x;
+				mesh.tex_coordinates[current_cam][cpt_visible_faces * 3 + 1](1) = (*projections)[idx_face * 3 + 1].y;
+
+				mesh.tex_coordinates[current_cam][cpt_visible_faces * 3 + 2](0) = (*projections)[idx_face * 3 + 2].x;
+				mesh.tex_coordinates[current_cam][cpt_visible_faces * 3 + 2](1) = (*projections)[idx_face * 3 + 2].y;
+
+				visible_faces[cpt_visible_faces] = mesh.tex_polygons[current_cam][idx_face];
+
+				cpt_visible_faces++;
+			}
+			else
+			{
+				// face is occluded copy face into temp vector
+				occluded_faces[cpt_occluded_faces] = mesh.tex_polygons[current_cam][idx_face];
+				cpt_occluded_faces++;
+			}
+		}
+		mesh.tex_coordinates[current_cam].resize(cpt_visible_faces * 3);
+
+		occluded_faces.resize(cpt_occluded_faces);
+		mesh.tex_polygons.push_back(occluded_faces);
+
+		visible_faces.resize(cpt_visible_faces);
+		mesh.tex_polygons[current_cam].clear();
+		mesh.tex_polygons[current_cam] = visible_faces;
+	}
+
+	if (mesh.tex_coordinates.size() <= cameras.size())
+	{
+		std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> > dummy_container;
+		mesh.tex_coordinates.push_back(dummy_container);
+	}
+
+	for (std::size_t idx_face = 0; idx_face < mesh.tex_polygons[cameras.size()].size(); ++idx_face)
+	{
+		Eigen::Vector2f UV1, UV2, UV3;
+		UV1(0) = -1.0; UV1(1) = -1.0;
+		UV2(0) = -1.0; UV2(1) = -1.0;
+		UV3(0) = -1.0; UV3(1) = -1.0;
+		mesh.tex_coordinates[cameras.size()].push_back(UV1);
+		mesh.tex_coordinates[cameras.size()].push_back(UV2);
+		mesh.tex_coordinates[cameras.size()].push_back(UV3);
+	}
+}
+
 void CloudHandler::set_cloud_color(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int r, int g, int b)
 {
 	for (size_t i = 0; i < input_cloud->points.size(); ++i) {
@@ -810,10 +1168,32 @@ bool CloudHandler::load_mesh(pcl::PolygonMesh::Ptr& input_mesh, std::string file
 	PCL_INFO("Loaded mesh from: %s \n",  file_name.c_str());
 }
 
+bool CloudHandler::load_textured_mesh(pcl::TextureMesh::Ptr& input_mesh, std::string file_name)
+{
+	PCL_INFO("Loading mesh %s \n", file_name.c_str());
+	if (pcl::io::loadOBJFile(resource_path_ + "/" + file_name, *input_mesh) == -1) {
+		PCL_ERROR("Couldn't read file: %s \n", file_name);
+		return false;
+	}
+	PCL_INFO("Loaded mesh from: %s \n", file_name.c_str());
+}
+
 void CloudHandler::show_mesh(pcl::PolygonMesh::Ptr& input_mesh)
 {	
 	pcl::visualization::PCLVisualizer viewer("Mesh Viewer");
 	viewer.addPolygonMesh(*input_mesh, "mesh");
+
+	PCL_INFO("Mesh visualized \n");
+	while (!viewer.wasStopped())
+	{
+		viewer.spinOnce();
+	}
+}
+
+void CloudHandler::show_textured_mesh(pcl::TextureMesh::Ptr& input_mesh)
+{
+	pcl::visualization::PCLVisualizer viewer("Mesh Viewer");
+	viewer.addTextureMesh(*input_mesh, "mesh");
 
 	PCL_INFO("Mesh visualized \n");
 	while (!viewer.wasStopped())
@@ -833,4 +1213,417 @@ void CloudHandler::show_mesh_cloud(pcl::PolygonMesh::Ptr& input_mesh, pcl::Point
 	{
 		viewer.spinOnce();
 	}
+}
+
+/** \brief Save a textureMesh object to obj file */
+int CloudHandler::saveOBJFile(const std::string& file_name, const pcl::TextureMesh& tex_mesh, unsigned precision)
+{
+	if (tex_mesh.cloud.data.empty())
+	{
+		PCL_ERROR("[pcl::io::saveOBJFile] Input point cloud has no data!\n");
+		return (-1);
+	}
+
+	// Open file
+	std::ofstream fs;
+	fs.precision(precision);
+	fs.open(file_name.c_str());
+
+	// Define material file
+	std::string mtl_file_name = file_name.substr(0, file_name.find_last_of(".")) + ".mtl";
+	// Strip path for "mtllib" command
+	std::string mtl_file_name_nopath = mtl_file_name;
+	mtl_file_name_nopath.erase(0, mtl_file_name.find_last_of('/') + 1);
+
+	/* Write 3D information */
+	// number of points
+	int nr_points = tex_mesh.cloud.width * tex_mesh.cloud.height;
+	int point_size = tex_mesh.cloud.data.size() / nr_points;
+
+	// mesh size
+	int nr_meshes = tex_mesh.tex_polygons.size();
+	// number of faces for header
+	int nr_faces = 0;
+	for (int m = 0; m < nr_meshes; ++m)
+		nr_faces += tex_mesh.tex_polygons[m].size();
+
+	// Write the header information
+	fs << "####" << std::endl;
+	fs << "# OBJ dataFile simple version. File name: " << file_name << std::endl;
+	fs << "# Vertices: " << nr_points << std::endl;
+	fs << "# Faces: " << nr_faces << std::endl;
+	fs << "# Material information:" << std::endl;
+	fs << "mtllib " << mtl_file_name_nopath << std::endl;
+	fs << "####" << std::endl;
+
+	// Write vertex coordinates
+	fs << "# Vertices" << std::endl;
+	for (int i = 0; i < nr_points; ++i)
+	{
+		int xyz = 0;
+		// "v" just be written one
+		bool v_written = false;
+		for (size_t d = 0; d < tex_mesh.cloud.fields.size(); ++d)
+		{
+			int count = tex_mesh.cloud.fields[d].count;
+			if (count == 0)
+				count = 1;          // we simply cannot tolerate 0 counts (coming from older converter code)
+			int c = 0;
+			// adding vertex
+			if ((tex_mesh.cloud.fields[d].datatype == 7) && (
+				tex_mesh.cloud.fields[d].name == "x" ||
+				tex_mesh.cloud.fields[d].name == "y" ||
+				tex_mesh.cloud.fields[d].name == "z"))
+			{
+				if (!v_written)
+				{
+					// write vertices beginning with v
+					fs << "v ";
+					v_written = true;
+				}
+				float value;
+				memcpy(&value, &tex_mesh.cloud.data[i * point_size + tex_mesh.cloud.fields[d].offset + c * sizeof(float)], sizeof(float));
+				fs << value;
+				if (++xyz == 3)
+					break;
+				fs << " ";
+			}
+		}
+		if (xyz != 3)
+		{
+			PCL_ERROR("[pcl::io::saveOBJFile] Input point cloud has no XYZ data!\n");
+			return (-2);
+		}
+		fs << std::endl;
+	}
+	fs << "# " << nr_points << " vertices" << std::endl;
+
+	// Write vertex normals
+	for (int i = 0; i < nr_points; ++i)
+	{
+		int xyz = 0;
+		// "vn" just be written one
+		bool v_written = false;
+		for (size_t d = 0; d < tex_mesh.cloud.fields.size(); ++d)
+		{
+			int count = tex_mesh.cloud.fields[d].count;
+			if (count == 0)
+				count = 1;          // we simply cannot tolerate 0 counts (coming from older converter code)
+			int c = 0;
+			// adding vertex
+			if ((tex_mesh.cloud.fields[d].datatype == 7) && (
+				tex_mesh.cloud.fields[d].name == "normal_x" ||
+				tex_mesh.cloud.fields[d].name == "normal_y" ||
+				tex_mesh.cloud.fields[d].name == "normal_z"))
+			{
+				if (!v_written)
+				{
+					// write vertices beginning with vn
+					fs << "vn ";
+					v_written = true;
+				}
+				float value;
+				memcpy(&value, &tex_mesh.cloud.data[i * point_size + tex_mesh.cloud.fields[d].offset + c * sizeof(float)], sizeof(float));
+				fs << value;
+				if (++xyz == 3)
+					break;
+				fs << " ";
+			}
+		}
+		if (xyz != 3)
+		{
+			PCL_ERROR("[pcl::io::saveOBJFile] Input point cloud has no normals!\n");
+			return (-2);
+		}
+		fs << std::endl;
+	}
+	// Write vertex texture with "vt" (adding latter)
+
+	for (int m = 0; m < nr_meshes; ++m)
+	{
+		if (tex_mesh.tex_coordinates.size() == 0)
+			continue;
+
+		PCL_INFO("%d vertex textures in submesh %d\n", tex_mesh.tex_coordinates[m].size(), m);
+		fs << "# " << tex_mesh.tex_coordinates[m].size() << " vertex textures in submesh " << m << std::endl;
+		for (size_t i = 0; i < tex_mesh.tex_coordinates[m].size(); ++i)
+		{
+			fs << "vt ";
+			fs << tex_mesh.tex_coordinates[m][i][0] << " " << tex_mesh.tex_coordinates[m][i][1] << std::endl;
+		}
+	}
+
+	int f_idx = 0;
+
+	// int idx_vt =0;
+	PCL_INFO("Writting faces...\n");
+	for (int m = 0; m < nr_meshes; ++m)
+	{
+		if (m > 0)
+			f_idx += tex_mesh.tex_polygons[m - 1].size();
+
+		if (tex_mesh.tex_materials.size() != 0)
+		{
+			fs << "# The material will be used for mesh " << m << std::endl;
+			//TODO pbl here with multi texture and unseen faces
+			fs << "usemtl " << tex_mesh.tex_materials[m].tex_name << std::endl;
+			fs << "# Faces" << std::endl;
+		}
+		for (size_t i = 0; i < tex_mesh.tex_polygons[m].size(); ++i)
+		{
+			// Write faces with "f"
+			fs << "f";
+			size_t j = 0;
+			// There's one UV per vertex per face, i.e., the same vertex can have
+			// different UV depending on the face.
+			for (j = 0; j < tex_mesh.tex_polygons[m][i].vertices.size(); ++j)
+			{
+				unsigned int idx = tex_mesh.tex_polygons[m][i].vertices[j] + 1;
+				fs << " " << idx
+					<< "/" << 3 * (i + f_idx) + j + 1
+					<< "/" << idx; // vertex index in obj file format starting with 1
+			}
+			fs << std::endl;
+		}
+		PCL_INFO("%d faces in mesh %d \n", tex_mesh.tex_polygons[m].size(), m);
+		fs << "# " << tex_mesh.tex_polygons[m].size() << " faces in mesh " << m << std::endl;
+	}
+	fs << "# End of File";
+
+	// Close obj file
+	PCL_INFO("Closing obj file\n");
+	fs.close();
+
+	/* Write material defination for OBJ file*/
+	// Open file
+	PCL_INFO("Writing material files\n");
+	//dont do it if no material to write
+	if (tex_mesh.tex_materials.size() == 0)
+		return (0);
+
+	std::ofstream m_fs;
+	m_fs.precision(precision);
+	m_fs.open(mtl_file_name.c_str());
+
+	// default
+	m_fs << "#" << std::endl;
+	m_fs << "# Wavefront material file" << std::endl;
+	m_fs << "#" << std::endl;
+	for (int m = 0; m < nr_meshes; ++m)
+	{
+		m_fs << "newmtl " << tex_mesh.tex_materials[m].tex_name << std::endl;
+		m_fs << "Ka " << tex_mesh.tex_materials[m].tex_Ka.r << " " << tex_mesh.tex_materials[m].tex_Ka.g << " " << tex_mesh.tex_materials[m].tex_Ka.b << std::endl; // defines the ambient color of the material to be (r,g,b).
+		m_fs << "Kd " << tex_mesh.tex_materials[m].tex_Kd.r << " " << tex_mesh.tex_materials[m].tex_Kd.g << " " << tex_mesh.tex_materials[m].tex_Kd.b << std::endl; // defines the diffuse color of the material to be (r,g,b).
+		m_fs << "Ks " << tex_mesh.tex_materials[m].tex_Ks.r << " " << tex_mesh.tex_materials[m].tex_Ks.g << " " << tex_mesh.tex_materials[m].tex_Ks.b << std::endl; // defines the specular color of the material to be (r,g,b). This color shows up in highlights.
+		m_fs << "d " << tex_mesh.tex_materials[m].tex_d << std::endl; // defines the transparency of the material to be alpha.
+		m_fs << "Ns " << tex_mesh.tex_materials[m].tex_Ns << std::endl; // defines the shininess of the material to be s.
+		m_fs << "illum " << tex_mesh.tex_materials[m].tex_illum << std::endl; // denotes the illumination model used by the material.
+		// illum = 1 indicates a flat material with no specular highlights, so the value of Ks is not used.
+		// illum = 2 denotes the presence of specular highlights, and so a specification for Ks is required.
+		m_fs << "map_Kd " << tex_mesh.tex_materials[m].tex_file << std::endl;
+		m_fs << "###" << std::endl;
+	}
+	m_fs.close();
+	return (0);
+}
+
+std::ifstream& CloudHandler::GotoLine(std::ifstream& file, unsigned int num)
+{
+	file.seekg(std::ios::beg);
+	for (int i = 0; i < num - 1; ++i)
+	{
+		file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	}
+	return (file);
+}
+
+/** \brief Helper function that reads a camera file outputed by Kinfu */
+bool CloudHandler::readCamPoseFile(std::string filename, pcl::TextureMapping<pcl::PointXYZ>::Camera& cam)
+{
+	std::ifstream myReadFile;
+	myReadFile.open(filename.c_str(), ios::in);
+	if (!myReadFile.is_open())
+	{
+		PCL_ERROR("Error opening file %d\n", filename.c_str());
+		return false;
+	}
+	myReadFile.seekg(ios::beg);
+
+	char current_line[1024];
+	double val;
+
+	// go to line 7 to read rotations
+	GotoLine(myReadFile, 2);
+
+	myReadFile >> val; cam.pose(0, 0) = val;
+	myReadFile >> val; cam.pose(0, 1) = val;
+	myReadFile >> val; cam.pose(0, 2) = val;
+	myReadFile >> val; cam.pose(0, 3) = val / 100000; //TX
+
+	myReadFile >> val; cam.pose(1, 0) = val;
+	myReadFile >> val; cam.pose(1, 1) = val;
+	myReadFile >> val; cam.pose(1, 2) = val;
+	myReadFile >> val; cam.pose(1, 3) = val / 100000; //TY
+
+	myReadFile >> val; cam.pose(2, 0) = val;
+	myReadFile >> val; cam.pose(2, 1) = val;
+	myReadFile >> val; cam.pose(2, 2) = val;
+	myReadFile >> val; cam.pose(2, 3) = val / 100000; //TZ
+
+	cam.pose(3, 0) = 0.0;
+	cam.pose(3, 1) = 0.0;
+	cam.pose(3, 2) = 0.0;
+	cam.pose(3, 3) = 1.0; //Scale
+
+	cam.pose = cam.pose.inverse();
+
+	// close file
+	myReadFile.close();
+
+	return true;
+}
+
+void CloudHandler::showCameras(pcl::texture_mapping::CameraVector cams, pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
+{
+
+	// visualization object
+	pcl::visualization::PCLVisualizer visu("cameras");
+
+	// add a visual for each camera at the correct pose
+	for (int i = 0; i < cams.size(); ++i)
+	{
+		// read current camera
+		pcl::TextureMapping<pcl::PointXYZ>::Camera cam = cams[i];
+		double focal = 500;
+		double height = 1000;
+		double width = 1000;
+
+		// create a 5-point visual for each camera
+		pcl::PointXYZ p1, p2, p3, p4, p5;
+		p1.x = 0; p1.y = 0; p1.z = 0;
+		double angleX = RAD2DEG(2.0 * atan(width / (2.0 * focal)));
+		double angleY = RAD2DEG(2.0 * atan(height / (2.0 * focal)));
+		double dist = 0.75;
+		double minX, minY, maxX, maxY;
+		maxX = dist * tan(atan(width / (2.0 * focal)));
+		minX = -maxX;
+		maxY = dist * tan(atan(height / (2.0 * focal)));
+		minY = -maxY;
+		p2.x = minX; p2.y = minY; p2.z = dist;
+		p3.x = maxX; p3.y = minY; p3.z = dist;
+		p4.x = maxX; p4.y = maxY; p4.z = dist;
+		p5.x = minX; p5.y = maxY; p5.z = dist;
+		p1 = pcl::transformPoint(p1, cam.pose);
+		p2 = pcl::transformPoint(p2, cam.pose);
+		p3 = pcl::transformPoint(p3, cam.pose);
+		p4 = pcl::transformPoint(p4, cam.pose);
+		p5 = pcl::transformPoint(p5, cam.pose);
+		std::stringstream ss;
+		ss << "Cam #" << i + 1;
+		visu.addText3D(ss.str(), p1, 0.1, 1.0, 1.0, 1.0, ss.str());
+
+		ss.str("");
+		ss << "camera_" << i << "line1";
+		visu.addLine(p1, p2, ss.str());
+		ss.str("");
+		ss << "camera_" << i << "line2";
+		visu.addLine(p1, p3, ss.str());
+		ss.str("");
+		ss << "camera_" << i << "line3";
+		visu.addLine(p1, p4, ss.str());
+		ss.str("");
+		ss << "camera_" << i << "line4";
+		visu.addLine(p1, p5, ss.str());
+		ss.str("");
+		ss << "camera_" << i << "line5";
+		visu.addLine(p2, p5, ss.str());
+		ss.str("");
+		ss << "camera_" << i << "line6";
+		visu.addLine(p5, p4, ss.str());
+		ss.str("");
+		ss << "camera_" << i << "line7";
+		visu.addLine(p4, p3, ss.str());
+		ss.str("");
+		ss << "camera_" << i << "line8";
+		visu.addLine(p3, p2, ss.str());
+	}
+
+	// add a coordinate system
+	visu.addCoordinateSystem(1.0);
+
+	// add the mesh's cloud (colored on Z axis)
+	pcl::visualization::PointCloudColorHandlerGenericField<pcl::PointXYZ> color_handler(cloud, "z");
+	visu.addPointCloud(cloud, color_handler, "cloud");
+
+	// reset camera
+	visu.resetCamera();
+
+	// wait for user input
+	visu.spin();
+}
+
+bool CloudHandler::isFaceProjected(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3,
+								   pcl::PointXY& proj1, pcl::PointXY& proj2, pcl::PointXY& proj3)
+{
+	return (getPointUVCoordinates(p1, proj1) && getPointUVCoordinates(p2, proj2) && getPointUVCoordinates(p3, proj3));
+}
+
+bool CloudHandler::getPointUVCoordinates(const pcl::PointXYZ& pt, pcl::PointXY& UV_coordinates)
+{
+
+	float radius = 1;
+	float magnitude = sqrt(pt.x * pt.x + pt.y * pt.y + pt.z * pt.z);
+	pcl::PointXYZ normalized_point = { pt.x / magnitude, pt.y / magnitude, pt.z / magnitude };
+	pcl::PointXYZ projected_point = { normalized_point.x * radius, normalized_point.y * radius, normalized_point.z * radius };
+
+	UV_coordinates.x = atan2(projected_point.y, projected_point.x) / (2 * M_PI) + 0.5;
+	// UV_coordinates.x = 1 - UV_coordinates.x;
+	UV_coordinates.y = asin(projected_point.z) / M_PI + 0.5;
+	UV_coordinates.y = 1 - UV_coordinates.y;
+
+	// point is visible!
+	if (UV_coordinates.x >= 0.0 && UV_coordinates.x <= 1.0 && UV_coordinates.y >= 0.0 && UV_coordinates.y <= 1.0)
+		return (true); // point was visible by the camera
+
+	// point is NOT visible by the camera
+	UV_coordinates.x = -1.0f;
+	UV_coordinates.y = -1.0f;
+	return (false); // point was not visible by the camera
+}
+
+void CloudHandler::getTriangleCircumcscribedCircleCentroid(const pcl::PointXY& p1, const pcl::PointXY& p2, const pcl::PointXY& p3, pcl::PointXY& circumcenter, double& radius)
+{
+	// compute centroid's coordinates (translate back to original coordinates)
+	circumcenter.x = static_cast<float> (p1.x + p2.x + p3.x) / 3;
+	circumcenter.y = static_cast<float> (p1.y + p2.y + p3.y) / 3;
+	double r1 = (circumcenter.x - p1.x) * (circumcenter.x - p1.x) + (circumcenter.y - p1.y) * (circumcenter.y - p1.y);
+	double r2 = (circumcenter.x - p2.x) * (circumcenter.x - p2.x) + (circumcenter.y - p2.y) * (circumcenter.y - p2.y);
+	double r3 = (circumcenter.x - p3.x) * (circumcenter.x - p3.x) + (circumcenter.y - p3.y) * (circumcenter.y - p3.y);
+
+	// radius
+	radius = std::sqrt(std::max(r1, std::max(r2, r3)));
+}
+
+bool CloudHandler::checkPointInsideTriangle(const pcl::PointXY& p1, const pcl::PointXY& p2, const pcl::PointXY& p3, const pcl::PointXY& pt)
+{
+	// Compute vectors
+	Eigen::Vector2d v0, v1, v2;
+	v0(0) = p3.x - p1.x; v0(1) = p3.y - p1.y; // v0= C - A
+	v1(0) = p2.x - p1.x; v1(1) = p2.y - p1.y; // v1= B - A
+	v2(0) = pt.x - p1.x; v2(1) = pt.y - p1.y; // v2= P - A
+
+	// Compute dot products
+	double dot00 = v0.dot(v0); // dot00 = dot(v0, v0)
+	double dot01 = v0.dot(v1); // dot01 = dot(v0, v1)
+	double dot02 = v0.dot(v2); // dot02 = dot(v0, v2)
+	double dot11 = v1.dot(v1); // dot11 = dot(v1, v1)
+	double dot12 = v1.dot(v2); // dot12 = dot(v1, v2)
+
+	// Compute barycentric coordinates
+	double invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+	double u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+	double v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+	// Check if point is in triangle
+	return ((u >= 0) && (v >= 0) && (u + v < 1));
 }
