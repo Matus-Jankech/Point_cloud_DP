@@ -873,19 +873,13 @@ void CloudHandler::map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::textu
 		pcl::PointCloud<pcl::PointXYZ>::Ptr camera_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 		pcl::transformPointCloud(*mesh_cloud, *camera_cloud, cameras[current_cam].pose.inverse());
 
+		// VISUALIZE CAMERAS
 		//pcl::visualization::PCLVisualizer visu("cameras");
 		//visu.addCoordinateSystem(10.0);
 		//pcl::visualization::PointCloudColorHandlerGenericField<pcl::PointXYZ> color_handler(camera_cloud, "z");
 		//visu.addPointCloud(camera_cloud, color_handler, "cloud");
 		//visu.resetCamera();
 		//visu.spin();
-
-		// CREATE OCTREE
-		pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree(new pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>(1.0));
-		octree->setResolution(0.05);
-		octree->setTreeDepth(3);
-		octree->setInputCloud(camera_cloud);
-		octree->addPointsFromInputCloud();
 
 		std::cout << "Camera: " << current_cam + 1 << std::endl;
 
@@ -899,14 +893,7 @@ void CloudHandler::map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::textu
 				(*camera_cloud)[tex_polygons_all[idx_face].vertices[0]],
 				(*camera_cloud)[tex_polygons_all[idx_face].vertices[1]],
 				(*camera_cloud)[tex_polygons_all[idx_face].vertices[2]],
-				uv_coord1, uv_coord2, uv_coord3)
-				&&
-				isPointVisible(
-				(*camera_cloud)[tex_polygons_all[idx_face].vertices[0]],
-				(*camera_cloud)[tex_polygons_all[idx_face].vertices[1]],
-				(*camera_cloud)[tex_polygons_all[idx_face].vertices[2]],
-				octree)
-				)
+				uv_coord1, uv_coord2, uv_coord3))
 			{
 				//keep track of closest camera to polygon 
 				double current_distance = distanceFromOriginToTriangleCentroid(
@@ -1471,85 +1458,6 @@ bool CloudHandler::getPointUVCoordinates(const pcl::PointXYZ& pt, pcl::PointXY& 
 	UV_coordinates.x = -1.0f;
 	UV_coordinates.y = -1.0f;
 	return (false); // point was not visible by the camera
-}
-
-void CloudHandler::getTriangleCircumcscribedCircleCentroid(const pcl::PointXY& p1, const pcl::PointXY& p2, const pcl::PointXY& p3, pcl::PointXY& circumcenter, double& radius)
-{
-	// compute centroid's coordinates (translate back to original coordinates)
-	circumcenter.x = static_cast<float> (p1.x + p2.x + p3.x) / 3;
-	circumcenter.y = static_cast<float> (p1.y + p2.y + p3.y) / 3;
-	double r1 = (circumcenter.x - p1.x) * (circumcenter.x - p1.x) + (circumcenter.y - p1.y) * (circumcenter.y - p1.y);
-	double r2 = (circumcenter.x - p2.x) * (circumcenter.x - p2.x) + (circumcenter.y - p2.y) * (circumcenter.y - p2.y);
-	double r3 = (circumcenter.x - p3.x) * (circumcenter.x - p3.x) + (circumcenter.y - p3.y) * (circumcenter.y - p3.y);
-
-	// radius
-	radius = std::sqrt(std::max(r1, std::max(r2, r3)));
-}
-
-bool CloudHandler::checkPointInsideTriangle(const pcl::PointXY& p1, const pcl::PointXY& p2, const pcl::PointXY& p3, const pcl::PointXY& pt)
-{
-	// Compute vectors
-	Eigen::Vector2d v0, v1, v2;
-	v0(0) = p3.x - p1.x; v0(1) = p3.y - p1.y; // v0= C - A
-	v1(0) = p2.x - p1.x; v1(1) = p2.y - p1.y; // v1= B - A
-	v2(0) = pt.x - p1.x; v2(1) = pt.y - p1.y; // v2= P - A
-
-	// Compute dot products
-	double dot00 = v0.dot(v0); // dot00 = dot(v0, v0)
-	double dot01 = v0.dot(v1); // dot01 = dot(v0, v1)
-	double dot02 = v0.dot(v2); // dot02 = dot(v0, v2)
-	double dot11 = v1.dot(v1); // dot11 = dot(v1, v1)
-	double dot12 = v1.dot(v2); // dot12 = dot(v1, v2)
-
-	// Compute barycentric coordinates
-	double invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
-	double u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-	double v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-
-	// Check if point is in triangle
-	return ((u >= 0) && (v >= 0) && (u + v < 1));
-}
-
-bool CloudHandler::isPointOccluded(const pcl::PointXYZ& pt, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree)
-{
-	Eigen::Vector3f direction;
-	direction(0) = pt.x;
-	direction(1) = pt.y;
-	direction(2) = pt.z;
-
-	pcl::Indices indices;
-
-	pcl::PointCloud< pcl::PointXYZ>::ConstPtr cloud(new pcl::PointCloud< pcl::PointXYZ>());
-	cloud = octree->getInputCloud();
-
-	double distance_threshold = octree->getResolution();
-
-	// raytrace
-	octree->getIntersectedVoxelIndices(direction, -direction, indices);
-
-	int nbocc = static_cast<int> (indices.size());
-	for (const auto& index : indices)
-	{
-		// if intersected point is on the over side of the camera
-		if (pt.z * (*cloud)[index].z < 0)
-		{
-			nbocc--;
-			continue;
-		}
-
-		if (std::fabs((*cloud)[index].z - pt.z) <= distance_threshold)
-		{
-			// points are very close to each-other, we do not consider the occlusion
-			nbocc--;
-		}
-	}
-
-	return (nbocc != 0);
-}
-
-bool CloudHandler::isPointVisible(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree)
-{
-	return !isPointOccluded(p1, octree) && !isPointOccluded(p2, octree) && !isPointOccluded(p3, octree);
 }
 
 double CloudHandler::distanceFromOriginToTriangleCentroid(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3) {
