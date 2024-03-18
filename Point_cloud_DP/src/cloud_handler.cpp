@@ -873,13 +873,20 @@ void CloudHandler::map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::textu
 		pcl::PointCloud<pcl::PointXYZ>::Ptr camera_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 		pcl::transformPointCloud(*mesh_cloud, *camera_cloud, cameras[current_cam].pose.inverse());
 
-		// VISUALIZE CAMERAS
+		// VISULIZE EACH CAMERA
 		//pcl::visualization::PCLVisualizer visu("cameras");
 		//visu.addCoordinateSystem(10.0);
 		//pcl::visualization::PointCloudColorHandlerGenericField<pcl::PointXYZ> color_handler(camera_cloud, "z");
 		//visu.addPointCloud(camera_cloud, color_handler, "cloud");
 		//visu.resetCamera();
 		//visu.spin();
+
+		// CREATE OCTREE
+		//pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree(new pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>(1.0));
+		//octree->setResolution(0.05);
+		//octree->setTreeDepth(3);
+		//octree->setInputCloud(camera_cloud);
+		//octree->addPointsFromInputCloud();
 
 		std::cout << "Camera: " << current_cam + 1 << std::endl;
 
@@ -894,6 +901,13 @@ void CloudHandler::map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::textu
 				(*camera_cloud)[tex_polygons_all[idx_face].vertices[1]],
 				(*camera_cloud)[tex_polygons_all[idx_face].vertices[2]],
 				uv_coord1, uv_coord2, uv_coord3))
+				//&&
+				//isPointVisible(
+				//(*camera_cloud)[tex_polygons_all[idx_face].vertices[0]],
+				//(*camera_cloud)[tex_polygons_all[idx_face].vertices[1]],
+				//(*camera_cloud)[tex_polygons_all[idx_face].vertices[2]],
+				//octree)
+				//)
 			{
 				//keep track of closest camera to polygon 
 				double current_distance = distanceFromOriginToTriangleCentroid(
@@ -1458,6 +1472,48 @@ bool CloudHandler::getPointUVCoordinates(const pcl::PointXYZ& pt, pcl::PointXY& 
 	UV_coordinates.x = -1.0f;
 	UV_coordinates.y = -1.0f;
 	return (false); // point was not visible by the camera
+}
+
+bool CloudHandler::isPointOccluded(const pcl::PointXYZ& pt, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree)
+{
+	Eigen::Vector3f direction;
+	direction(0) = pt.x;
+	direction(1) = pt.y;
+	direction(2) = pt.z;
+
+	pcl::Indices indices;
+
+	pcl::PointCloud< pcl::PointXYZ>::ConstPtr cloud(new pcl::PointCloud< pcl::PointXYZ>());
+	cloud = octree->getInputCloud();
+
+	double distance_threshold = octree->getResolution();
+
+	// raytrace
+	octree->getIntersectedVoxelIndices(direction, -direction, indices);
+
+	int nbocc = static_cast<int> (indices.size());
+	for (const auto& index : indices)
+	{
+		// if intersected point is on the over side of the camera
+		if (pt.z * (*cloud)[index].z < 0)
+		{
+			nbocc--;
+			continue;
+		}
+
+		if (std::fabs((*cloud)[index].z - pt.z) <= distance_threshold)
+		{
+			// points are very close to each-other, we do not consider the occlusion
+			nbocc--;
+		}
+	}
+
+	return (nbocc != 0);
+}
+
+bool CloudHandler::isPointVisible(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree)
+{
+	return !isPointOccluded(p1, octree) && !isPointOccluded(p2, octree) && !isPointOccluded(p3, octree);
 }
 
 double CloudHandler::distanceFromOriginToTriangleCentroid(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3) {
