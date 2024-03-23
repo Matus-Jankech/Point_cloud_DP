@@ -50,6 +50,8 @@
 #include <pcl/io/obj_io.h>
 #include <pcl/common/transforms.h>
 
+#include <opencv2/opencv.hpp>
+
 class CloudHandler
 {
 public:
@@ -110,16 +112,18 @@ private:
 	void showCameras(pcl::texture_mapping::CameraVector cams, pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud);
 	bool isFaceProjected(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3, pcl::PointXY& proj1, pcl::PointXY& proj2, pcl::PointXY& proj3);
 	bool getPointUVCoordinates(const pcl::PointXYZ& pt, pcl::PointXY& UV_coordinates);
-	void getTriangleCircumcscribedCircleCentroid(const pcl::PointXY& p1, const pcl::PointXY& p2, const pcl::PointXY& p3, pcl::PointXY& circumcenter, double& radius);
-	bool checkPointInsideTriangle(const pcl::PointXY& p1, const pcl::PointXY& p2, const pcl::PointXY& p3, const pcl::PointXY& pt);
 	bool isPointOccluded(const pcl::PointXYZ& pt, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree);
 	bool isPointVisible(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree);
 	double distanceFromOriginToTriangleCentroid(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3);
+	bool isPointInPolygon(pcl::PointXY& point, std::vector<pcl::PointXY>& polygon_points);
 	void map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::texture_mapping::CameraVector& cameras);
 
 public:
 	std::string resource_path_ = "C:/Users/admin/Documents/Visual Studio 2022/Projects/Point_cloud_DP/Resources";
 	std::vector<std::array<int, 3>> segment_colors_ = { {255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}, {255, 0, 255}, {0, 255, 255}, {128, 0, 0}, {0, 128, 0}, {0, 0, 128}, {0, 128, 128}, {128, 128, 0}, {128, 0, 128}, {0, 128, 128}, {128, 128, 128}, {255, 165, 0}, {128, 0, 0}, {128, 128, 0}, {0, 128, 0}, {128, 128, 128}, {165, 42, 42}, {255, 192, 203}, {255, 20, 147}, {0, 255, 127}, {139, 0, 139}, {255, 255, 255}, {0, 255, 255}, {255, 140, 0}, {255, 255, 0}, {106, 90, 205}, {255, 69, 0}, {0, 250, 154} };
+
+private:
+	std::vector<pcl::PointXY> car_polygon;
 
 };
 

@@ -2,6 +2,51 @@
 
 CloudHandler::CloudHandler()
 {
+	const double scale_height = 3840.0;
+	const double scale_width = 7680.0;
+
+	car_polygon.push_back(pcl::PointXY(0 / scale_width, 1 - 2490 / scale_height));
+	car_polygon.push_back(pcl::PointXY(275 / scale_width, 1 - 2515 / scale_height));
+	car_polygon.push_back(pcl::PointXY(360 / scale_width, 1 - 2560 / scale_height));
+	car_polygon.push_back(pcl::PointXY(425 / scale_width, 1 - 2630 / scale_height));
+	car_polygon.push_back(pcl::PointXY(555 / scale_width, 1 - 2650 / scale_height));
+	car_polygon.push_back(pcl::PointXY(545 / scale_width, 1 - 2695 / scale_height));
+	car_polygon.push_back(pcl::PointXY(485 / scale_width, 1 - 2705 / scale_height));
+	car_polygon.push_back(pcl::PointXY(580 / scale_width, 1 - 2810 / scale_height));
+	car_polygon.push_back(pcl::PointXY(850 / scale_width, 1 - 3025 / scale_height));
+	car_polygon.push_back(pcl::PointXY(1215 / scale_width, 1 - 3205 / scale_height));
+	car_polygon.push_back(pcl::PointXY(1480 / scale_width, 1 - 3275 / scale_height));
+	car_polygon.push_back(pcl::PointXY(1755 / scale_width, 1 - 3295 / scale_height));
+	car_polygon.push_back(pcl::PointXY(2105 / scale_width, 1 - 3325 / scale_height));
+	car_polygon.push_back(pcl::PointXY(2455 / scale_width, 1 - 3335 / scale_height));
+	car_polygon.push_back(pcl::PointXY(3030 / scale_width, 1 - 3480 / scale_height));
+	car_polygon.push_back(pcl::PointXY(3255 / scale_width, 1 - 3345 / scale_height));
+	car_polygon.push_back(pcl::PointXY(3422 / scale_width, 1 - 3145 / scale_height));
+	car_polygon.push_back(pcl::PointXY(3492 / scale_width, 1 - 3079 / scale_height));
+	car_polygon.push_back(pcl::PointXY(3570 / scale_width, 1 - 2933 / scale_height));
+	car_polygon.push_back(pcl::PointXY(3628 / scale_width, 1 - 2771 / scale_height));
+	car_polygon.push_back(pcl::PointXY(4056 / scale_width, 1 - 2773 / scale_height));
+	car_polygon.push_back(pcl::PointXY(4114 / scale_width, 1 - 2947 / scale_height));
+	car_polygon.push_back(pcl::PointXY(4208 / scale_width, 1 - 3131 / scale_height));
+	car_polygon.push_back(pcl::PointXY(4250 / scale_width, 1 - 3143 / scale_height));
+	car_polygon.push_back(pcl::PointXY(4400 / scale_width, 1 - 3337 / scale_height));
+	car_polygon.push_back(pcl::PointXY(5000 / scale_width, 1 - 3343 / scale_height));
+	car_polygon.push_back(pcl::PointXY(5501 / scale_width, 1 - 3321 / scale_height));
+	car_polygon.push_back(pcl::PointXY(5944 / scale_width, 1 - 3309 / scale_height));
+	car_polygon.push_back(pcl::PointXY(6418 / scale_width, 1 - 3233 / scale_height));
+	car_polygon.push_back(pcl::PointXY(6647 / scale_width, 1 - 3141 / scale_height));
+	car_polygon.push_back(pcl::PointXY(6919 / scale_width, 1 - 2993 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7100 / scale_width, 1 - 2845 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7225 / scale_width, 1 - 2711 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7175 / scale_width, 1 - 2700 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7159 / scale_width, 1 - 2651 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7261 / scale_width, 1 - 2633 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7277 / scale_width, 1 - 2649 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7365 / scale_width, 1 - 2559 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7445 / scale_width, 1 - 2517 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7680 / scale_width, 1 - 2493 / scale_height));
+	car_polygon.push_back(pcl::PointXY(7680 / scale_width, 1 - 3840 / scale_height));
+	car_polygon.push_back(pcl::PointXY(0 / scale_width, 1 - 3840 / scale_height));
 }
 
 void CloudHandler::filter_outliers(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, int meanK, double std_dev)
@@ -1466,12 +1511,14 @@ bool CloudHandler::getPointUVCoordinates(const pcl::PointXYZ& pt, pcl::PointXY& 
 
 	// point is visible!
 	if (UV_coordinates.x >= 0.0 && UV_coordinates.x <= 1.0 && UV_coordinates.y >= 0.0 && UV_coordinates.y <= 1.0)
-		return (true); // point was visible by the camera
-
-	// point is NOT visible by the camera
+	{
+		if(!isPointInPolygon(UV_coordinates, car_polygon))
+			return true; // point was visible by the camera
+	}
+		
 	UV_coordinates.x = -1.0f;
 	UV_coordinates.y = -1.0f;
-	return (false); // point was not visible by the camera
+	return false; // point was not visible by the camera
 }
 
 bool CloudHandler::isPointOccluded(const pcl::PointXYZ& pt, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree)
@@ -1527,4 +1574,20 @@ double CloudHandler::distanceFromOriginToTriangleCentroid(const pcl::PointXYZ& p
 	double distance = std::sqrt(centroid.x * centroid.x + centroid.y * centroid.y + centroid.z * centroid.z);
 
 	return distance;
+}
+
+bool CloudHandler::isPointInPolygon(pcl::PointXY& point, std::vector<pcl::PointXY>& polygon_points) {
+	int i, j, nvert = polygon_points.size();
+	bool c = false;
+
+	for (i = 0, j = nvert - 1; i < nvert; j = i++) {
+		if (((polygon_points[i].y >= point.y) != (polygon_points[j].y >= point.y)) &&
+			(point.x <= (polygon_points[j].x - polygon_points[i].x) * (point.y - polygon_points[i].y) / 
+			(polygon_points[j].y - polygon_points[i].y) + polygon_points[i].x))
+		{
+			c = !c;
+		}	
+	}
+
+	return c;
 }

@@ -243,6 +243,80 @@ void visualize_classified_cloud_test(std::string file_name)
 	cloud_handler.show_clouds(clouds, normals);
 }
 
+void visualize_trimmed_texture()
+{
+	CloudHandler cloud_handler;
+	std::string base_path = "Roundabout_cloud";
+	cloud_handler.set_base_path(base_path);
+
+	cv::Mat image = cv::imread(cloud_handler.resource_path_ + "/Textures/9275.jpg");
+	if (image.empty()) {
+		std::cerr << "Error: Could not open or find the image!\n";
+		return;
+	}
+
+	const double scale_height = 3840.0 / 1000.0;
+	const double scale_width = 7680.0 / 1880.0;
+
+	// Define the vertices of the polygon
+	std::vector<cv::Point> polygon;
+	polygon.push_back(cv::Point(0 / scale_width, 2490 / scale_height));
+	polygon.push_back(cv::Point(275 / scale_width, 2515 / scale_height));
+	polygon.push_back(cv::Point(360 / scale_width, 2560 / scale_height));
+	polygon.push_back(cv::Point(425 / scale_width, 2630 / scale_height));
+	polygon.push_back(cv::Point(555 / scale_width, 2650 / scale_height));
+	polygon.push_back(cv::Point(545 / scale_width, 2695 / scale_height));
+	polygon.push_back(cv::Point(485 / scale_width, 2705 / scale_height));
+	polygon.push_back(cv::Point(580 / scale_width, 2810 / scale_height));
+	polygon.push_back(cv::Point(850 / scale_width, 3025 / scale_height));
+	polygon.push_back(cv::Point(1215 / scale_width, 3205 / scale_height));
+	polygon.push_back(cv::Point(1480 / scale_width, 3275 / scale_height));
+	polygon.push_back(cv::Point(1755 / scale_width, 3295 / scale_height));
+	polygon.push_back(cv::Point(2105 / scale_width, 3325 / scale_height));
+	polygon.push_back(cv::Point(2455 / scale_width, 3335 / scale_height));
+	polygon.push_back(cv::Point(3030 / scale_width, 3480 / scale_height));
+	polygon.push_back(cv::Point(3255 / scale_width, 3345 / scale_height));
+	polygon.push_back(cv::Point(3422 / scale_width, 3145 / scale_height));
+	polygon.push_back(cv::Point(3492 / scale_width, 3079 / scale_height));
+	polygon.push_back(cv::Point(3570 / scale_width, 2933 / scale_height));
+	polygon.push_back(cv::Point(3628 / scale_width, 2771 / scale_height));
+	polygon.push_back(cv::Point(4056 / scale_width, 2773 / scale_height));
+	polygon.push_back(cv::Point(4114 / scale_width, 2947 / scale_height));
+	polygon.push_back(cv::Point(4208 / scale_width, 3131 / scale_height));
+	polygon.push_back(cv::Point(4250 / scale_width, 3143 / scale_height));
+	polygon.push_back(cv::Point(4400 / scale_width, 3337 / scale_height));
+	polygon.push_back(cv::Point(5000 / scale_width, 3343 / scale_height));
+	polygon.push_back(cv::Point(5501 / scale_width, 3321 / scale_height));
+	polygon.push_back(cv::Point(5944 / scale_width, 3309 / scale_height));
+	polygon.push_back(cv::Point(6418 / scale_width, 3233 / scale_height));
+	polygon.push_back(cv::Point(6647 / scale_width, 3141 / scale_height));
+	polygon.push_back(cv::Point(6919 / scale_width, 2993 / scale_height));
+	polygon.push_back(cv::Point(7100 / scale_width, 2845 / scale_height));
+	polygon.push_back(cv::Point(7225 / scale_width, 2711 / scale_height));
+	polygon.push_back(cv::Point(7175 / scale_width, 2700 / scale_height));
+	polygon.push_back(cv::Point(7159 / scale_width, 2651 / scale_height));
+	polygon.push_back(cv::Point(7261 / scale_width, 2633 / scale_height));
+	polygon.push_back(cv::Point(7277 / scale_width, 2649 / scale_height));
+	polygon.push_back(cv::Point(7365 / scale_width, 2559 / scale_height));
+	polygon.push_back(cv::Point(7445 / scale_width, 2517 / scale_height));
+	polygon.push_back(cv::Point(7680 / scale_width, 2493 / scale_height));
+	polygon.push_back(cv::Point(7680 / scale_width, 3840 / scale_height));
+	polygon.push_back(cv::Point(0 / scale_width, 3840 / scale_height));
+
+	cv::Size size(1880, 1000);
+	cv::resize(image, image, size, 1.0, 1.0);
+
+	// Draw polygon
+	for (size_t i = 0; i < polygon.size(); ++i) {
+		cv::line(image, polygon[i], polygon[(i + 1) % polygon.size()], cv::Scalar(0, 255, 0), 1);
+	}
+
+	// Display the image with the polygon lines
+	cv::imshow("Image with Polygon Lines", image);
+	cv::waitKey(0);
+	cv::destroyAllWindows();
+}
+
 void calculate_all()
 {
 	CloudHandler cloud_handler;
@@ -278,6 +352,8 @@ void calculate_all()
 	//cloud_handler.downsample_objects();
 	//cloud_handler.create_mesh_objects();
 	//cloud_handler.combine_mesh_ground_objects();
+
+	visualize_trimmed_texture();
 
 	// TEXTURIZE MESH
 	pcl::PolygonMesh::Ptr mesh_all(new pcl::PolygonMesh);
