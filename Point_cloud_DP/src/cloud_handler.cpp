@@ -87,8 +87,8 @@ void CloudHandler::filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& 
 	pcl::PassThrough<pcl::PointXYZRGB> pass;
 	pass.setInputCloud(input_cloud);
 	pass.setFilterFieldName("z");
-	pass.setFilterLimits(179, 182); // dataset 1
-	//pass.setFilterLimits(-5, 5); // dataset 2
+	//pass.setFilterLimits(179, 182); // dataset 1
+	pass.setFilterLimits(-30, 30); // dataset 2
 
 	pcl::copyPointCloud(*input_cloud, *filtered_data);
 	pass.setNegative(false);
@@ -206,17 +206,23 @@ void CloudHandler::calculate_normals_estimation(pcl::PointCloud<pcl::PointXYZRGB
 	pcl::NormalEstimationOMP<pcl::PointXYZRGB, pcl::PointNormal> ne;
 	std::string normals_file = "normlas_" + std::to_string(limit) + ".pcd";
 
+	Eigen::Vector4f centroid;
+	pcl::compute3DCentroid(*input_cloud, centroid);
+
+	if (input_cloud->size() < 40000) ne.setViewPoint(centroid[0], centroid[1], centroid[2]);
+	else ne.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 	ne.setInputCloud(input_cloud);
-	ne.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 	ne.setSearchMethod(tree);
 	ne.setRadiusSearch(limit); // Use all neighbors in a sphere of radius 5cm
+	ne.setNumberOfThreads(8);
 	ne.compute(*cloud_normals);
 }
 
 void CloudHandler::calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
 								 pcl::PointCloud<pcl::PointNormal>::Ptr& don_cloud,
 								 pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_small,
-								 pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large)
+								 pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large,
+								 std::string file_name)
 {
 	pcl::copyPointCloud(*input_cloud, *don_cloud);
 
@@ -233,7 +239,11 @@ void CloudHandler::calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_c
 
 	std::cout << "Calculating DoN... " << std::endl;
 	don.computeFeature(*don_cloud);
-	//save_cloud<pcl::PointNormal>(don_cloud, "don.pcd");
+
+	size_t pos = file_name.find("_downsampled.ply");
+	std::string in_name = file_name.substr(0, pos);
+	save_cloud<pcl::PointNormal>(don_cloud, in_name + "_don.pcd");
+	save_cloud<pcl::PointNormal>(don_cloud, "don.pcd");
 }
 
 int CloudHandler::find_max_object_index()
@@ -294,7 +304,7 @@ void CloudHandler::adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr&
 	// Get normlas estimation + DoN
 	calculate_normals_estimation(input_cloud, cloud_normals_large, upper_limit);
 	calculate_normals_estimation(input_cloud, cloud_normals_small, lower_limit);
-	calculate_don(input_cloud, don_cloud, cloud_normals_small, cloud_normals_large);
+	calculate_don(input_cloud, don_cloud, cloud_normals_small, cloud_normals_large, file_name);
 
 	
 	for (int i = 0; i < lower_threshold.size(); i++)
@@ -352,7 +362,7 @@ void CloudHandler::adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr&
 }
 
 void CloudHandler::create_mesh_GPT(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name)
-{
+{	
 	// Normal estimation*
 	PCL_INFO("Calculating normal estimation... \n");
 	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
@@ -458,6 +468,8 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 
 	if (input_cloud->size() < 40000) n.setViewPoint(centroid[0], centroid[1], centroid[2]);
 	else n.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+	//if (input_cloud->size() < 40000)  n.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+	//else n.setViewPoint(centroid[0], centroid[1], centroid[2]);
 	n.setInputCloud(input_cloud);
 	n.setSearchSurface(input_cloud_full);
 	n.setSearchMethod(tree);
@@ -469,7 +481,7 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::concatenateFields(*input_cloud, *normals, *cloud_with_normals);
 
-	//save_cloud<pcl::PointNormal>(cloud_with_normals, "/Testing/object_64_normals.pcd");
+	//save_cloud<pcl::PointNormal>(cloud_with_normals, "car.pcd");
 
 	pcl::Poisson<pcl::PointNormal> poisson;
 	poisson.setInputCloud(cloud_with_normals); // Set your input point cloud
@@ -662,6 +674,11 @@ void CloudHandler::cpc_segmentation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr& inp
 	pcl::console::print_highlight("Getting supervoxel adjacency\n");
 	std::multimap<std::uint32_t, std::uint32_t> supervoxel_adjacency;
 	super.getSupervoxelAdjacency(supervoxel_adjacency);
+
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
+	load_cloud<pcl::PointXYZRGB>(ground, "/street_cloud_ground.ply");
+	set_cloud_color(ground, 80, 80, 80);
+	viewer->addPointCloud(ground, "ground");
 
 	if (visualize)
 	{
@@ -927,11 +944,11 @@ void CloudHandler::map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::textu
 		//visu.spin();
 
 		// CREATE OCTREE
-		//pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree(new pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>(1.0));
-		//octree->setResolution(0.05);
-		//octree->setTreeDepth(3);
-		//octree->setInputCloud(camera_cloud);
-		//octree->addPointsFromInputCloud();
+		pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>::Ptr octree(new pcl::octree::OctreePointCloudSearch<pcl::PointXYZ>(1.0));
+		octree->setResolution(0.05);
+		octree->setTreeDepth(3);
+		octree->setInputCloud(camera_cloud);
+		octree->addPointsFromInputCloud();
 
 		std::cout << "Camera: " << current_cam + 1 << std::endl;
 
@@ -945,14 +962,14 @@ void CloudHandler::map_textures_on_mesh(pcl::TextureMesh& mesh, const pcl::textu
 				(*camera_cloud)[tex_polygons_all[idx_face].vertices[0]],
 				(*camera_cloud)[tex_polygons_all[idx_face].vertices[1]],
 				(*camera_cloud)[tex_polygons_all[idx_face].vertices[2]],
-				uv_coord1, uv_coord2, uv_coord3))
-				//&&
-				//isPointVisible(
-				//(*camera_cloud)[tex_polygons_all[idx_face].vertices[0]],
-				//(*camera_cloud)[tex_polygons_all[idx_face].vertices[1]],
-				//(*camera_cloud)[tex_polygons_all[idx_face].vertices[2]],
-				//octree)
-				//)
+				uv_coord1, uv_coord2, uv_coord3)
+				&&
+				isPointVisible(
+				(*camera_cloud)[tex_polygons_all[idx_face].vertices[0]],
+				(*camera_cloud)[tex_polygons_all[idx_face].vertices[1]],
+				(*camera_cloud)[tex_polygons_all[idx_face].vertices[2]],
+				octree)
+				)
 			{
 				//keep track of closest camera to polygon 
 				double current_distance = distanceFromOriginToTriangleCentroid(
@@ -1053,7 +1070,7 @@ void CloudHandler::show_cloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_clou
 void CloudHandler::show_cloud(pcl::PointCloud<pcl::PointNormal>::Ptr& input_cloud)
 {
 	pcl::visualization::PCLVisualizer viewer("Cloud Viewer");
-	viewer.addPointCloudNormals<pcl::PointNormal>(input_cloud, 1, 1, "normals");
+	viewer.addPointCloudNormals<pcl::PointNormal>(input_cloud, 1, 0.2, "normals");
 
 	PCL_INFO("Point cloud visualized \n");
 	while (!viewer.wasStopped())
@@ -1110,6 +1127,7 @@ void CloudHandler::show_mesh(pcl::PolygonMesh::Ptr& input_mesh)
 {	
 	pcl::visualization::PCLVisualizer viewer("Mesh Viewer");
 	viewer.addPolygonMesh(*input_mesh, "mesh");
+	std::cout << "Polygon size: " << input_mesh->polygons.size() << " , Cloud size: " << input_mesh->cloud.height << " , " << input_mesh->cloud.width << std::endl;
 
 	PCL_INFO("Mesh visualized \n");
 	while (!viewer.wasStopped())

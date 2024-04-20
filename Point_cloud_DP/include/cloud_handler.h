@@ -103,7 +103,8 @@ private:
 	void calculate_don(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud,
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& don_cloud,
 					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_small,
-					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large);
+					   pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_normals_large,
+					   std::string file_name);
 	void separate_segmented_clouds(bool visualize = false);
 	void downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds, std::string file_name);
 	int saveOBJFile(const std::string& file_name, const pcl::TextureMesh& tex_mesh, unsigned precision);

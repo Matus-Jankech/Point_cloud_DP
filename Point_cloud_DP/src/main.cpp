@@ -61,6 +61,50 @@ void visualize_classified_cloud(std::string base_path)
 		}
 	}
 
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(ground, "/street_cloud_ground.ply");
+	cloud_handler.set_cloud_color(ground, 80, 80, 80);
+	clouds.push_back(ground);
+
+	cloud_handler.show_clouds(clouds, normals);
+}
+
+void visualize_don_cloud(std::string base_path)
+{
+	CloudHandler cloud_handler;
+	cloud_handler.set_base_path(base_path);
+
+	std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
+	std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr> normals;
+
+	int max_object_index = cloud_handler.find_max_object_index();
+	max_object_index = max_object_index + 1;
+
+	for (int i = 0; i < max_object_index; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			pcl::PointCloud<pcl::PointXYZRGB>::Ptr object(new pcl::PointCloud<pcl::PointXYZRGB>);
+			std::string file_name = "Objects/object_" + std::to_string(i) + "_c" + std::to_string(j) + ".ply";
+
+			if (cloud_handler.load_cloud<pcl::PointXYZRGB>(object, file_name)) {
+				cloud_handler.set_cloud_color(object, 80, 80, 80);
+				clouds.push_back(object);
+			}
+		}
+
+		pcl::PointCloud<pcl::PointNormal>::Ptr normal(new pcl::PointCloud<pcl::PointNormal>);
+		std::string file_name = "Objects/object_" + std::to_string(i) + "_don.pcd";
+		if (cloud_handler.load_cloud<pcl::PointNormal>(normal, file_name)) {
+			normals.push_back(normal);
+		}
+	}
+
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(ground, "/street_cloud_ground.ply");
+	cloud_handler.set_cloud_color(ground, 80, 80, 80);
+	clouds.push_back(ground);
+
 	cloud_handler.show_clouds(clouds, normals);
 }
 
@@ -86,6 +130,11 @@ void visualize_downsampled_cloud(std::string base_path)
 			clouds.push_back(object);
 		}
 	}
+
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(ground, "/street_cloud_ground.ply");
+	cloud_handler.set_cloud_color(ground, 80, 80, 80);
+	//clouds.push_back(ground);
 
 	cloud_handler.show_clouds(clouds, normals);
 }
@@ -308,7 +357,7 @@ void visualize_trimmed_texture()
 
 	// Draw polygon
 	for (size_t i = 0; i < polygon.size(); ++i) {
-		cv::line(image, polygon[i], polygon[(i + 1) % polygon.size()], cv::Scalar(0, 255, 0), 1);
+		cv::line(image, polygon[i], polygon[(i + 1) % polygon.size()], cv::Scalar(0, 255, 0), 2);
 	}
 
 	// Display the image with the polygon lines
@@ -327,12 +376,12 @@ void calculate_all()
 	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr street_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 	//cloud_handler.load_cloud<pcl::PointXYZRGB>(street_cloud, "street_cloud.ply");
 	//cloud_handler.filter_outliers(street_cloud, 20, 2.0); // First dataset
-	//cloud_handler.filter_outliers(street_cloud, 20, 2.0); // Second dataset
 
 	//// GROUND + OBJECTS
 	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
 	//cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers, "street_cloud_inliers.ply");
 	//cloud_handler.filter_ground_points(inliers);
+	//visualize_ground_objects(base_path);
 
 	//// CREATE GROUND MESH
 	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -353,9 +402,8 @@ void calculate_all()
 	//cloud_handler.create_mesh_objects();
 	//cloud_handler.combine_mesh_ground_objects();
 
-	visualize_trimmed_texture();
-
 	// TEXTURIZE MESH
+	//visualize_trimmed_texture();
 	pcl::PolygonMesh::Ptr mesh_all(new pcl::PolygonMesh);
 	cloud_handler.load_mesh(mesh_all, "street_cloud_mesh.vtk");
 	cloud_handler.texturize_mesh(mesh_all);
@@ -366,6 +414,60 @@ void calculate_all()
 	//visualize_mesh_cloud(base_path + "/street_cloud");
 	//visualize_classified_cloud(base_path);
 	//visualize_downsampled_cloud(base_path);
+
+	// MESH CHAPTER
+	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr car(new pcl::PointCloud<pcl::PointXYZRGB>);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr car_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr car_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	//cloud_handler.load_cloud<pcl::PointXYZ>(car_xyz, "car.ply");
+	//cloud_handler.load_cloud<pcl::PointXYZRGB>(car, "car.ply");
+	////cloud_handler.adaptive_downsampling(car, 0.08, 0.40, "car_downsampled.ply");
+	//cloud_handler.load_cloud<pcl::PointXYZ>(car_downsampled, "car_downsampled.ply");
+	//cloud_handler.create_mesh_Poison(car_xyz, car_xyz, "car_poisson.vtk", 9);
+	//cloud_handler.create_mesh_Poison(car_downsampled, car_xyz, "car_poisson_downsampled.vtk", 9);
+	//cloud_handler.create_mesh_MC(car_xyz, "car_MC.vtk");
+	//cloud_handler.create_mesh_MC(car_downsampled, "car_MC_downsampled.vtk");
+	//cloud_handler.create_mesh_GPT(car_xyz, "car_GPT.vtk");
+	//cloud_handler.create_mesh_GPT(car_downsampled, "car_GPT_downsampled.vtk");
+	//visualize_cloud(base_path + "/car.ply");
+	//visualize_mesh(base_path + "/car_GPT");
+	//visualize_mesh(base_path + "/car_MC");
+	//visualize_mesh(base_path + "/car_poisson_downsampled");
+	//visualize_cloud(base_path + "/car_downsampled.ply");
+
+	/*std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
+	std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr> normals;
+	pcl::PointCloud<pcl::PointNormal>::Ptr car_normal(new pcl::PointCloud<pcl::PointNormal>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr car_downsampled_RGB(new pcl::PointCloud<pcl::PointXYZRGB>);
+	cloud_handler.load_cloud<pcl::PointNormal>(car_normal, "car.pcd");
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(car_downsampled_RGB, "car_downsampled.ply");
+	clouds.push_back(car_downsampled_RGB);
+	normals.push_back(car_normal);
+	cloud_handler.show_clouds(clouds,normals);*/
+
+	//visualize_mesh(base_path + "/car_GPT_downsampled");
+	//visualize_mesh(base_path + "/car_MC_downsampled");
+	//visualize_mesh(base_path + "/car_poisson_downsampled");
+
+	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr inliers_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr inliers_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	//cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers, "street_cloud_inliers.ply");
+	//cloud_handler.load_cloud<pcl::PointXYZ>(inliers_xyz, "street_cloud_inliers.ply");
+	////cloud_handler.adaptive_downsampling(inliers, 0.08, 0.40, "inliers_downsampled.ply");
+	//cloud_handler.load_cloud<pcl::PointXYZ>(inliers_downsampled, "inliers_downsampled.ply");
+	//cloud_handler.create_mesh_Poison(inliers_downsampled, inliers_xyz, "street_cloud_mesh.vtk", 9);
+	//visualize_cloud(base_path + "/inliers_downsampled.ply");
+	//visualize_mesh(base_path + "/street_cloud_mesh");
+
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr ground_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr ground_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+	//cloud_handler.load_cloud<pcl::PointXYZ>(ground_downsampled, "street_cloud_ground_downsampled.ply");
+	//cloud_handler.load_cloud<pcl::PointXYZ>(ground_xyz, "street_cloud_ground.ply");
+	//cloud_handler.create_mesh_Poison(ground_downsampled, ground_xyz, "ground_mesh.vtk", 13);
+	//cloud_handler.create_mesh_objects();
+	//cloud_handler.combine_mesh_ground_objects();
+	//visualize_mesh(base_path + "/street_cloud_mesh");
 
 	//// TESTING
 	//visualize_mesh("car_test");
@@ -384,15 +486,16 @@ void calculate_all()
 
 
 	//// PRESENTATION
-	//visualize_cloud("Street_cloud/street_cloud.ply");
-	//visualize_mesh("Street_cloud/street_cloud_mesh");
+	//visualize_cloud(base_path + "/street_cloud_inliers.ply");
+	//visualize_mesh(base_path +  "/street_cloud_mesh");
 	//visualize_inliers_outliers(base_path);
 	//visualize_ground_objects(base_path);
 	//visualize_cloud("Street_cloud/street_cloud_objects.ply");
-	//visualize_cloud("Street_cloud/street_cloud_ground.ply");
-	//visualize_cloud("Street_cloud/street_cloud_ground_downsampled.ply");
-	//visualize_classified_cloud();
-	//visualize_downsampled_cloud();
+	//visualize_cloud(base_path + "/street_cloud_ground.ply");
+	//visualize_cloud(base_path + "/street_cloud_ground_downsampled.ply");
+	//visualize_don_cloud(base_path);
+	//visualize_classified_cloud(base_path);
+	//visualize_downsampled_cloud(base_path);
 
 	//visualize_cloud("Testing/object_371.ply");
 	//std::string name = "object_364";
