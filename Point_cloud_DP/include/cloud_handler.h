@@ -51,6 +51,7 @@
 #include <pcl/common/transforms.h>
 
 #include <opencv2/opencv.hpp>
+#include <pcl/surface/vtk_smoothing/vtk_mesh_quadric_decimation.h>
 
 class CloudHandler
 {
@@ -93,6 +94,7 @@ public:
 	void create_mesh_MC(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud, std::string file_name);
 	void create_mesh_objects();
 	void combine_mesh_ground_objects();
+	void decimate_mesh(pcl::PolygonMesh::Ptr input_mesh);
 
 	// Texturing
 	void texturize_mesh(pcl::PolygonMesh::Ptr& input_mesh);

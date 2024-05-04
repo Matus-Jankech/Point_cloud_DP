@@ -173,7 +173,7 @@ double calculateAverageDistance(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud) {
 
 void CloudHandler::downsample_clouds(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& input_clouds, std::string file_name)
 {	
-	std::vector<double> voxel_sizes = { 0.13, 0.06, 0.03, 0.0 };
+	std::vector<double> voxel_sizes = { 0.13, 0.05, 0.02, 0.00 };
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_all(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::VoxelGrid<pcl::PointXYZRGB> sor;
@@ -287,14 +287,17 @@ void CloudHandler::downsample_objects()
 
 		std::cout << "\n";
 		load_cloud<pcl::PointXYZRGB>(object, in_name);
-		adaptive_downsampling(object, 0.08, 0.40, out_name);
+		adaptive_downsampling(object, 0.07, 0.40, out_name); // 0.03 - 0.07 - 0.06 - 0.07 - 0.07 (SD1 - SD5)
 	}
 }
 
 void CloudHandler::adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud, double lower_limit, double upper_limit, std::string file_name)
 {	
-	std::vector<double> lower_threshold = { 0.0, 0.06, 0.12, 0.18};
-	std::vector<double> upper_threshold = { 0.06, 0.12, 0.18, 1};
+	std::vector<double> lower_threshold = { 0.0, 0.06, 0.10, 0.13};
+	std::vector<double> upper_threshold = { 0.06, 0.10, 0.13, 1};
+
+	//std::vector<double> lower_threshold = { 0.0, 0.07, 0.11, 0.16 };
+	//std::vector<double> upper_threshold = { 0.07, 0.11, 0.16, 1 };
 
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_small(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_large(new pcl::PointCloud<pcl::PointNormal>);
@@ -481,14 +484,13 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::concatenateFields(*input_cloud, *normals, *cloud_with_normals);
 
-	//save_cloud<pcl::PointNormal>(cloud_with_normals, "car.pcd");
-
 	pcl::Poisson<pcl::PointNormal> poisson;
 	poisson.setInputCloud(cloud_with_normals); // Set your input point cloud
 	poisson.setDepth(depth); // Set the depth level of the Octree
-	poisson.setSolverDivide(50);
-	poisson.setIsoDivide(50);
-	poisson.setPointWeight(50);
+	poisson.setSolverDivide(10);
+	poisson.setIsoDivide(10);
+	poisson.setPointWeight(5);
+	poisson.setSamplesPerNode(2);
 	poisson.setThreads(8);
 
 	// Perform Poisson surface reconstruction
@@ -564,10 +566,16 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 	pcl::surface::SimplificationRemoveUnusedVertices sruv;
 	sruv.simplify(mesh, *simplified_mesh);
 
+	pcl::PolygonMesh::Ptr decimated_mesh(new pcl::PolygonMesh);
+	pcl::MeshQuadricDecimationVTK deciamtion;
+	deciamtion.setInputMesh(simplified_mesh);
+	deciamtion.setTargetReductionFactor(0.70); // SD1-SD4 = 0.70 ; SD5 = 0.95
+	deciamtion.process(*decimated_mesh);
+
 	//// Apply MeshSmoothingLaplacianVTK for mesh smoothing
 	pcl::PolygonMesh smoothed_mesh;
 	pcl::MeshSmoothingLaplacianVTK vtk;
-	vtk.setInputMesh(simplified_mesh);
+	vtk.setInputMesh(decimated_mesh);
 	vtk.setBoundarySmoothing(true);
 	vtk.setFeatureEdgeSmoothing(true);
 	vtk.setFeatureAngle(10);
@@ -578,6 +586,20 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 
 	PCL_INFO("\nSaving mesh... \n");
 	pcl::io::savePolygonFileVTK(resource_path_ + "/" + file_name, smoothed_mesh);
+	PCL_INFO("Mesh saved \n");
+}
+
+void CloudHandler::decimate_mesh(pcl::PolygonMesh::Ptr input_mesh)
+{
+	PCL_INFO("\Decimating mesh... \n");
+	pcl::PolygonMesh::Ptr decimated_mesh(new pcl::PolygonMesh);
+	pcl::MeshQuadricDecimationVTK deciamtion;
+	deciamtion.setInputMesh(input_mesh);
+	deciamtion.setTargetReductionFactor(0.8);
+	deciamtion.process(*decimated_mesh);
+
+	PCL_INFO("\nSaving mesh... \n");
+	pcl::io::savePolygonFileVTK(resource_path_ + "/street_cloud_mesh_decimated.vtk", *decimated_mesh);
 	PCL_INFO("Mesh saved \n");
 }
 
