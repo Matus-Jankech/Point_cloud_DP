@@ -87,8 +87,7 @@ void CloudHandler::filter_ground_points(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& 
 	pcl::PassThrough<pcl::PointXYZRGB> pass;
 	pass.setInputCloud(input_cloud);
 	pass.setFilterFieldName("z");
-	//pass.setFilterLimits(179, 182); // dataset 1
-	pass.setFilterLimits(-30, 30); // dataset 2
+	pass.setFilterLimits(-100, 100); 
 
 	pcl::copyPointCloud(*input_cloud, *filtered_data);
 	pass.setNegative(false);
@@ -296,9 +295,6 @@ void CloudHandler::adaptive_downsampling(pcl::PointCloud<pcl::PointXYZRGB>::Ptr&
 	std::vector<double> lower_threshold = { 0.0, 0.06, 0.10, 0.13};
 	std::vector<double> upper_threshold = { 0.06, 0.10, 0.13, 1};
 
-	//std::vector<double> lower_threshold = { 0.0, 0.07, 0.11, 0.16 };
-	//std::vector<double> upper_threshold = { 0.07, 0.11, 0.16, 1 };
-
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_small(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_large(new pcl::PointCloud<pcl::PointNormal>);
 	pcl::PointCloud<pcl::PointNormal>::Ptr don_cloud(new pcl::PointCloud<pcl::PointNormal>);
@@ -471,8 +467,6 @@ void CloudHandler::create_mesh_Poison(pcl::PointCloud<pcl::PointXYZ>::Ptr& input
 
 	if (input_cloud->size() < 40000) n.setViewPoint(centroid[0], centroid[1], centroid[2]);
 	else n.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-	//if (input_cloud->size() < 40000)  n.setViewPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-	//else n.setViewPoint(centroid[0], centroid[1], centroid[2]);
 	n.setInputCloud(input_cloud);
 	n.setSearchSurface(input_cloud_full);
 	n.setSearchMethod(tree);

@@ -381,177 +381,53 @@ void from_vtk_to_ply(std::string base_path)
 void calculate_all()
 {
 	CloudHandler cloud_handler;
-	std::string base_path = "Adaptive";
+	std::string base_path = "Street_cloud";
 	cloud_handler.set_base_path(base_path);
 
-	//from_vtk_to_ply(base_path);
+	// INLIERS + OUTLIERS
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr street_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(street_cloud, "street_cloud.ply");
+	cloud_handler.filter_outliers(street_cloud, 20, 2.0);
+	visualize_inliers_outliers(base_path);
 
-	//decamite_mesh(base_path);
-	//visualize_mesh(base_path + "/street_cloud_mesh_decimated");
-	//from_vtk_to_ply(base_path);
+	// GROUND + OBJECTS
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers, "street_cloud_inliers.ply");
+	cloud_handler.filter_ground_points(inliers);
+	visualize_ground_objects(base_path);
 
-	//// INLIERS + OUTLIERS
-	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr street_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-	//cloud_handler.load_cloud<pcl::PointXYZRGB>(street_cloud, "street_cloud.ply");
-	//cloud_handler.filter_outliers(street_cloud, 20, 2.0);
-	//visualize_inliers_outliers(base_path);
+	// CREATE GROUND MESH
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr ground_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr ground_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+	cloud_handler.load_cloud<pcl::PointXYZ>(ground_xyz, "street_cloud_ground.ply");
+	cloud_handler.load_cloud<pcl::PointXYZRGB>(ground, "street_cloud_ground.ply");
+	cloud_handler.downsample_cloud(ground, 0.20, "street_cloud_ground_downsampled.ply");
+	cloud_handler.load_cloud<pcl::PointXYZ>(ground_downsampled, "street_cloud_ground_downsampled.ply");
+	cloud_handler.create_mesh_Poison(ground_downsampled, ground_xyz, "ground_mesh.vtk", 13);
+	visualize_mesh(base_path + "/ground_mesh");
 
-	//// GROUND + OBJECTS
-	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
-	//cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers, "street_cloud_inliers.ply");
-	//cloud_handler.filter_ground_points(inliers);
-	//visualize_ground_objects(base_path);
-
-	//// CREATE GROUND MESH
-	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr ground(new pcl::PointCloud<pcl::PointXYZRGB>);
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr ground_xyz(new pcl::PointCloud<pcl::PointXYZ>);
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr ground_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	//cloud_handler.load_cloud<pcl::PointXYZ>(ground_xyz, "street_cloud_ground.ply");
-	//cloud_handler.load_cloud<pcl::PointXYZRGB>(ground, "street_cloud_ground.ply");
-	//cloud_handler.downsample_cloud(ground, 0.20, "street_cloud_ground_downsampled.ply");
-	//cloud_handler.load_cloud<pcl::PointXYZ>(ground_downsampled, "street_cloud_ground_downsampled.ply");
-	//cloud_handler.create_mesh_Poison(ground_downsampled, ground_xyz, "ground_mesh.vtk", 13);
-	//visualize_mesh(base_path + "/ground_mesh");
-
-	//// SEGMENT OBJECTS + CREATE MESH
-	//pcl::PointCloud<pcl::PointXYZRGBA>::Ptr objects(new pcl::PointCloud<pcl::PointXYZRGBA>);
-	//cloud_handler.load_cloud<pcl::PointXYZRGBA>(objects, "street_cloud_objects.ply");
-	//cloud_handler.cpc_segmentation(objects, true);
-	//cloud_handler.downsample_objects();
-	//visualize_classified_cloud(base_path);
-	//cloud_handler.create_mesh_objects();
-	//cloud_handler.combine_mesh_ground_objects();
+	// SEGMENT OBJECTS + CREATE MESH
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr objects(new pcl::PointCloud<pcl::PointXYZRGBA>);
+	cloud_handler.load_cloud<pcl::PointXYZRGBA>(objects, "street_cloud_objects.ply");
+	cloud_handler.cpc_segmentation(objects, true);
+	cloud_handler.downsample_objects();
+	visualize_classified_cloud(base_path);
+	cloud_handler.create_mesh_objects();
+	cloud_handler.combine_mesh_ground_objects();
 
 	// TEXTURIZE MESH
-	//visualize_trimmed_texture();
-	//pcl::PolygonMesh::Ptr mesh_all(new pcl::PolygonMesh);
-	//cloud_handler.load_mesh(mesh_all, "street_cloud_mesh.vtk");
-	//cloud_handler.texturize_mesh(mesh_all);
-	//visualize_textured_mesh(base_path + "/Textures/textured_mesh");
+	pcl::PolygonMesh::Ptr mesh_all(new pcl::PolygonMesh);
+	cloud_handler.load_mesh(mesh_all, "street_cloud_mesh.vtk");
+	cloud_handler.texturize_mesh(mesh_all);
+	visualize_textured_mesh(base_path + "/Textures/textured_mesh");
 
-	//// VISUALIZE RESULTS
-	//visualize_cloud(base_path + "/street_cloud_inliers.ply");
-	//visualize_mesh(base_path + "/street_cloud_mesh");
-	//visualize_mesh_cloud(base_path + "/street_cloud");
-	//visualize_classified_cloud(base_path);
-	//visualize_downsampled_cloud(base_path);
-
-	// MESH CHAPTER
-	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr car(new pcl::PointCloud<pcl::PointXYZRGB>);
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr car_xyz(new pcl::PointCloud<pcl::PointXYZ>);
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr car_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	//cloud_handler.load_cloud<pcl::PointXYZ>(car_xyz, "car.ply");
-	//cloud_handler.load_cloud<pcl::PointXYZRGB>(car, "car.ply");
-	////cloud_handler.adaptive_downsampling(car, 0.08, 0.40, "car_downsampled.ply");
-	//cloud_handler.load_cloud<pcl::PointXYZ>(car_downsampled, "car_downsampled.ply");
-	//cloud_handler.create_mesh_Poison(car_xyz, car_xyz, "car_poisson.vtk", 9);
-	//cloud_handler.create_mesh_Poison(car_downsampled, car_xyz, "car_poisson_downsampled.vtk", 9);
-	//cloud_handler.create_mesh_MC(car_xyz, "car_MC.vtk");
-	//cloud_handler.create_mesh_MC(car_downsampled, "car_MC_downsampled.vtk");
-	//cloud_handler.create_mesh_GPT(car_xyz, "car_GPT.vtk");
-	//cloud_handler.create_mesh_GPT(car_downsampled, "car_GPT_downsampled.vtk");
-	//visualize_cloud(base_path + "/car.ply");
-	//visualize_mesh(base_path + "/car_GPT");
-	//visualize_mesh(base_path + "/car_MC");
-	//visualize_mesh(base_path + "/car_poisson_downsampled");
-	//visualize_cloud(base_path + "/car_downsampled.ply");
-
-	/*std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
-	std::vector<pcl::PointCloud<pcl::PointNormal>::Ptr> normals;
-	pcl::PointCloud<pcl::PointNormal>::Ptr car_normal(new pcl::PointCloud<pcl::PointNormal>);
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr car_downsampled_RGB(new pcl::PointCloud<pcl::PointXYZRGB>);
-	cloud_handler.load_cloud<pcl::PointNormal>(car_normal, "car.pcd");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(car_downsampled_RGB, "car_downsampled.ply");
-	clouds.push_back(car_downsampled_RGB);
-	normals.push_back(car_normal);
-	cloud_handler.show_clouds(clouds,normals);*/
-
-	//visualize_mesh(base_path + "/car_GPT_downsampled");
-	//visualize_mesh(base_path + "/car_MC_downsampled");
-	//visualize_mesh(base_path + "/car_poisson_downsampled");
-
-	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr inliers(new pcl::PointCloud<pcl::PointXYZRGB>);
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr inliers_xyz(new pcl::PointCloud<pcl::PointXYZ>);
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr inliers_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	//cloud_handler.load_cloud<pcl::PointXYZRGB>(inliers, "street_cloud_inliers.ply");
-	//cloud_handler.load_cloud<pcl::PointXYZ>(inliers_xyz, "street_cloud_inliers.ply");
-	////cloud_handler.adaptive_downsampling(inliers, 0.08, 0.40, "inliers_downsampled.ply");
-	//cloud_handler.load_cloud<pcl::PointXYZ>(inliers_downsampled, "inliers_downsampled.ply");
-	//cloud_handler.create_mesh_Poison(inliers_downsampled, inliers_xyz, "street_cloud_mesh.vtk", 9);
-	//visualize_cloud(base_path + "/inliers_downsampled.ply");
-	//visualize_mesh(base_path + "/street_cloud_mesh");
-
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr ground_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr ground_xyz(new pcl::PointCloud<pcl::PointXYZ>);
-	//cloud_handler.load_cloud<pcl::PointXYZ>(ground_downsampled, "street_cloud_ground_downsampled.ply");
-	//cloud_handler.load_cloud<pcl::PointXYZ>(ground_xyz, "street_cloud_ground.ply");
-	//cloud_handler.create_mesh_Poison(ground_downsampled, ground_xyz, "ground_mesh.vtk", 13);
-	//cloud_handler.create_mesh_objects();
-	//cloud_handler.combine_mesh_ground_objects();
-	//visualize_mesh(base_path + "/street_cloud_mesh");
-
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr car(new pcl::PointCloud<pcl::PointXYZRGB>);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr car_xyz(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr car_downsampled(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr car_downsampled_normal(new pcl::PointCloud<pcl::PointXYZ>);
-	cloud_handler.load_cloud<pcl::PointXYZ>(car_xyz, "car2.ply");
-	cloud_handler.load_cloud<pcl::PointXYZRGB>(car, "car2.ply");
-
-	cloud_handler.adaptive_downsampling(car, 0.03, 0.40, "car_downsampled.ply");
-	visualize_classified_cloud_test("car");
-	visualize_cloud(base_path + "/car_downsampled.ply");
-	cloud_handler.load_cloud<pcl::PointXYZ>(car_downsampled, "car_downsampled.ply");
-	cloud_handler.create_mesh_Poison(car_xyz, car_xyz, "car_poisson.vtk", 9);
-	cloud_handler.create_mesh_Poison(car_downsampled, car_xyz, "car_poisson_downsampled.vtk", 9);
-
-	//cloud_handler.downsample_cloud(car, 0.020, "car_downsampled_normal.ply");
-	//cloud_handler.load_cloud<pcl::PointXYZ>(car_downsampled_normal, "car_downsampled_normal.ply");
-	//cloud_handler.create_mesh_Poison(car_downsampled_normal, car_xyz, "car_poisson_downsampled_normal.vtk", 9);
-
-	////visualize_cloud(base_path + "/car.ply");
-	////visualize_cloud(base_path + "/car_downsampled.ply");
-	//visualize_cloud(base_path + "/car_downsampled_normal.ply");
-	visualize_mesh(base_path + "/car_poisson");
-	visualize_mesh(base_path + "/car_poisson_downsampled");
-	visualize_mesh(base_path + "/car_poisson_downsampled_normal");
-
-
-	//// TESTING
-	//visualize_mesh("car_test");
-	//visualize_mesh("Presenation/mesh_Poisson1");
-	//findObjectTest("object_64");
-
-	//std::string name = "car";
-	//downsampleCloudTest(name);
-	//visualize_classified_cloud_test(name);
-	//createMeshTest(name + "_downsampled");
-	//visualize_mesh_cloud("Testing/" + name + "_downsampled");
-	//createMeshTest(name);
-	//visualize_mesh_cloud("Testing/" + name);
-	//visualize_normals(name);
-	//findObjectPassTrough();
-
-
-	//// PRESENTATION
-	//visualize_cloud(base_path + "/street_cloud_inliers.ply");
-	//visualize_mesh(base_path +  "/street_cloud_mesh");
-	//visualize_inliers_outliers(base_path);
-	//visualize_ground_objects(base_path);
-	//visualize_cloud(base_path + "/street_cloud_objects.ply");
-	//visualize_cloud(base_path + "/street_cloud_ground.ply");
-	//visualize_cloud(base_path + "/street_cloud_ground_downsampled.ply");
-	//visualize_don_cloud(base_path);
-	//visualize_classified_cloud(base_path);
+	// VISUALIZE RESULTS
+	visualize_cloud(base_path + "/street_cloud_inliers.ply");
+	visualize_mesh(base_path + "/street_cloud_mesh");
+	visualize_mesh_cloud(base_path + "/street_cloud");
+	visualize_classified_cloud(base_path);
 	visualize_downsampled_cloud(base_path);
-
-	//visualize_cloud("Testing/object_371.ply");
-	//std::string name = "object_364";
-	//downsampleCloudTest(name);
-	//createMeshTest(name + "_downsampled");
-	//visualize_mesh_cloud("Testing/" + name + "_downsampled");
-	//createMeshTest(name);
-	//visualize_mesh_cloud("Testing/" + name);
-	//visualize_normals(name);
 }
 
 int main(int argc, char** argv)
